@@ -1,10 +1,16 @@
-// client/src/pages/Invest.tsx (FIXED UX: Added Referral Requirement Warning)
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// client/src/pages/Invest.tsx (FINAL PRODUCTION READY)
 
 import React, { useEffect, useState, useCallback } from 'react'; 
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { InvestmentPackage, UserInvestment } from '../types/userTypes';
+
+// --- CONFIGURATION ---
+// Use the environment variable for the base URL.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// --- END CONFIGURATION ---
 
 const Invest: React.FC = () => {
     // 1. ALL HOOKS MUST BE AT THE ABSOLUTE TOP (UNCONDITIONAL)
@@ -37,17 +43,17 @@ const Invest: React.FC = () => {
             };
             
             // Fetch packages
-            const packagesRes = await axios.get<InvestmentPackage[]>('http://localhost:5000/api/investments/packages', config);
+            const packagesRes = await axios.get<InvestmentPackage[]>(`${API_BASE_URL}/api/investments/packages`, config); // <-- FIXED URL
             setPackages(packagesRes.data);
 
             // Fetch user investments
-            const investmentsRes = await axios.get<UserInvestment[]>('http://localhost:5000/api/investments/my-investments', config);
+            const investmentsRes = await axios.get<UserInvestment[]>(`${API_BASE_URL}/api/investments/my-investments`, config); // <-- FIXED URL
             setMyInvestments(investmentsRes.data);
 
         } catch (err) {
             let errorMessage = 'Failed to load investment data.';
             if (axios.isAxiosError(err) && err.response) {
-                errorMessage = err.response.data.message || 'Server Error.';
+                errorMessage = (err.response.data as any).message || 'Server Error.';
             }
             setError(errorMessage);
         } finally {
@@ -67,15 +73,18 @@ const Invest: React.FC = () => {
 
     // Conditional early return AFTER all hooks
     if (!userInfo) {
-        navigate('/login');
-        return null;
+        // Only redirect if userInfo is actually null/undefined
+        if (userToken === undefined) {
+            navigate('/login');
+            return null;
+        }
     }
 
     // ----------------------------------------------------
     // Correct and single definition of handlePurchase
     // ----------------------------------------------------
     const handlePurchase = async (packageId: string) => {
-        if (!userInfo.token) return;
+        if (!userInfo?.token) return;
 
         setPurchaseLoading(packageId);
         setMessage(null);
@@ -90,7 +99,7 @@ const Invest: React.FC = () => {
             };
 
             const { data } = await axios.post(
-                'http://localhost:5000/api/investments/purchase',
+                `${API_BASE_URL}/api/investments/purchase`, // <-- FIXED URL
                 { packageId },
                 config
             );
@@ -106,7 +115,7 @@ const Invest: React.FC = () => {
         } catch (err) {
             let errorMessage = 'Purchase failed.';
             if (axios.isAxiosError(err) && err.response) {
-                errorMessage = err.response.data.message || 'Transaction error.';
+                errorMessage = (err.response.data as any).message || 'Transaction error.';
             }
             setError(errorMessage);
         } finally {
@@ -118,8 +127,8 @@ const Invest: React.FC = () => {
     // Correct and single definition of handleWithdrawal
     // ----------------------------------------------------
     const handleWithdrawal = async (investmentId: string) => {
-        if (!userInfo.token) return;
-        console.log(`Attempting withdrawal for ID: ${investmentId}. Length: ${investmentId.length}`)
+        if (!userInfo?.token) return;
+        console.log(`Attempting withdrawal for ID: ${investmentId}`)
 
         setPurchaseLoading(investmentId);
         setMessage(null);
@@ -133,7 +142,7 @@ const Invest: React.FC = () => {
             };
 
             const { data } = await axios.post(
-                `http://localhost:5000/api/investments/withdraw/${investmentId}`,
+                `${API_BASE_URL}/api/investments/withdraw/${investmentId}`, // <-- FIXED URL
                 {},
                 config
             );
@@ -147,7 +156,7 @@ const Invest: React.FC = () => {
         } catch (err) {
             let errorMessage = 'Withdrawal failed.';
             if (axios.isAxiosError(err) && err.response) {
-                errorMessage = err.response.data.message || 'Transaction error.';
+                errorMessage = (err.response.data as any).message || 'Transaction error.';
             }
             setError(errorMessage);
         } finally {
@@ -159,9 +168,9 @@ const Invest: React.FC = () => {
     const cardClass = "bg-white/10 p-6 rounded-xl shadow-lg border border-pi-accent/50";
     const highlightClass = "text-pi-green-alt font-semibold";
     
-    // Use optional chaining just in case referrals is undefined
-    const currentReferrals = userInfo.referrals?.length ?? 0;
-    const currentBalance = userInfo.piCoinsBalance;
+    // Use optional chaining for safe access to userInfo properties
+    const currentReferrals = userInfo?.referrals?.length ?? 0;
+    const currentBalance = userInfo?.piCoinsBalance ?? 0;
 
     return (
         <div className="w-full max-w-5xl p-4">
@@ -257,8 +266,10 @@ const Invest: React.FC = () => {
                  <h3 className="text-3xl font-bold text-white mb-4 border-b border-pi-accent/50 pb-2">
                     My Investments
                 </h3>
-                {myInvestments.length === 0 ? (
-                    <p className="text-gray-400">You have no investments yet.</p>
+                {loading ? (
+                    <div className="text-gray-400">Loading your investments...</div>
+                ) : myInvestments.length === 0 ? (
+                    <p className="text-gray-400">You have no active or completed investments yet.</p>
                 ) : (
                     <div className="space-y-4">
                         {myInvestments.map(inv => {
@@ -272,7 +283,7 @@ const Invest: React.FC = () => {
                                 <div key={inv._id} className={`${cardClass} border-l-4 ${isCompleted ? 'border-yellow-400' : isWithdrawn ? 'border-gray-500' : 'border-pi-green-alt'} flex justify-between items-center`}>
                                     <div>
                                         <p className="text-xl font-semibold">{inv.package.name} <span className={`text-sm ml-2 ${isCompleted ? 'text-yellow-400' : isWithdrawn ? 'text-gray-500' : 'text-pi-green-alt'}`}>({inv.status.toUpperCase()})</span></p>
-                                        <p className="text-gray-400">Invested: {inv.investedAmount} P$ | Earned: {inv.totalReturns.toFixed(2)} P$</p>
+                                        <p className="text-gray-400">Invested: {inv.investedAmount} P$ | Earned: **{inv.totalReturns.toFixed(2)} P$**</p>
                                         <p className="text-sm text-gray-500">Ends: {new Date(inv.endDate).toLocaleDateString()}</p>
                                         {/* Display referral requirement only for withdrawal */}
                                         {requiresReferrals && isCompleted && !isWithdrawn && (

@@ -1,8 +1,13 @@
-// client/src/pages/Transfer.tsx (FIXED)
+// client/src/pages/Transfer.tsx (FINAL PRODUCTION READY)
 import React, { useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+// --- CONFIGURATION ---
+// Use the environment variable for the base URL.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// --- END CONFIGURATION ---
 
 const Transfer: React.FC = () => {
     // 1. ALL HOOKS MUST BE AT THE TOP (UNCONDITIONAL)
@@ -25,7 +30,7 @@ const Transfer: React.FC = () => {
         setMessage('');
         
         if (amount <= 0 || !recipientEmail) {
-            setMessage('Please enter a valid email and amount.');
+            setMessage('Please enter a valid email and amount greater than zero.');
             return;
         }
 
@@ -46,7 +51,7 @@ const Transfer: React.FC = () => {
             };
 
             const { data } = await axios.post(
-                'http://localhost:5000/api/users/transfer',
+                `${API_BASE_URL}/api/users/transfer`, // <-- FIXED URL
                 { recipientEmail, amount },
                 config
             );
@@ -63,7 +68,9 @@ const Transfer: React.FC = () => {
         } catch (error) {
             let errorMessage = 'An unexpected error occurred.';
             if (axios.isAxiosError(error) && error.response) {
-                errorMessage = error.response.data.message || 'Transfer failed.';
+                // Check for common error structure from backend
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                errorMessage = (error.response.data as any).message || 'Transfer failed.';
             }
             setMessage(`Error: ${errorMessage}`);
         } finally {

@@ -163,11 +163,13 @@ const WithdrawalForm: React.FC = () => {
                 ...withdrawalDetails, 
             };
 
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
             const { data } = await axios.post<{ message: string, newBalance: number }>(
-                'http://localhost:5000/api/users/withdraw',
-                requestBody,
-                config
-            );
+                `${API_BASE_URL}/api/users/withdraw`, // <-- FIXED URL
+                requestBody,
+                config
+            );
 
             // Update user's balance in global context on successful withdrawal
             dispatch({ 

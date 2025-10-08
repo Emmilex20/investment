@@ -1,13 +1,19 @@
-// client/src/pages/Register.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// client/src/pages/Register.tsx (FINAL PRODUCTION READY)
 
 import React, { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
 import axios from 'axios';
-import type { User } from '../types/userTypes'; // Import the type
-import { useAuth } from '../context/AuthContext'; // NEW IMPORT
+import type { User } from '../types/userTypes';
+import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'http://localhost:5000/api/users/register'; // Ensure this matches your backend PORT
+// --- CONFIGURATION ---
+// Use the environment variable for the base URL.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// --- END CONFIGURATION ---
+
+const API_URL = `${API_BASE_URL}/api/users/register`; // <-- FIXED URL
 
 const Register: React.FC = () => {
   const [name, setName] = useState<string>('');
@@ -18,7 +24,13 @@ const Register: React.FC = () => {
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
-  const { login } = useAuth(); 
+  const { login, userInfo } = useAuth(); // Also extract userInfo to check if already logged in
+
+  // Early return if user is already logged in
+  if (userInfo) {
+      navigate('/dashboard');
+      return null;
+  }
 
   const submitHandler = async (e: FormEvent) => {
     e.preventDefault();
@@ -45,20 +57,24 @@ const Register: React.FC = () => {
           name, 
           email, 
           password, 
-          referralCode: referralCode || undefined // Only send if it exists
+          // Use a conditional spread or simple check to ensure an empty string isn't sent
+          referralCode: referralCode.trim() || undefined 
         },
         config
       );
 
-      // --- CRUCIAL CHANGE HERE ---
-      login(data); // Use the context login function
+      // Use the context login function, which saves the user data and token
+      login(data); 
       setMessage('Registration successful! Redirecting to dashboard...');
-      navigate('/dashboard');
+      
+      // Navigate after a slight delay to allow message to show
+      setTimeout(() => navigate('/dashboard'), 500);
 
     } catch (error) {
         let errorMessage = 'An unexpected error occurred.';
         if (axios.isAxiosError(error) && error.response) {
-            errorMessage = error.response.data.message || error.response.data.error || 'Server Error';
+            // Check for common error structure from backend
+            errorMessage = (error.response.data as any).message || (error.response.data as any).error || 'Server Error';
         }
       setMessage(errorMessage);
     } finally {
@@ -142,7 +158,8 @@ const Register: React.FC = () => {
               id="referralCode"
               placeholder="Enter referral code"
               value={referralCode}
-              onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              // Convert to uppercase immediately for a better user experience, as codes are often case-insensitive
+              onChange={(e) => setReferralCode(e.target.value.toUpperCase())} 
               className={inputClass}
             />
           </div>

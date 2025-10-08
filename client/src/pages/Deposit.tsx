@@ -1,9 +1,15 @@
-// client/src/pages/Deposit.tsx (FIXED)
+// client/src/pages/Deposit.tsx (FINAL PRODUCTION READY)
 
 import React, { useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+// --- CONFIGURATION ---
+// Use the environment variable for the base URL.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// --- END CONFIGURATION ---
+
 
 const Deposit: React.FC = () => {
     // 1. ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP
@@ -25,6 +31,7 @@ const Deposit: React.FC = () => {
 
     // Simulated rates (must match backend for estimation)
     const USD_TO_PI_RATE = 100; 
+    // This NGN rate is for estimation only. The backend will determine the final rate.
     const NGN_TO_USD_RATE = 0.001; 
 
     // Calculate USD equivalent
@@ -36,6 +43,7 @@ const Deposit: React.FC = () => {
         e.preventDefault();
         setMessage('');
         
+        // Basic frontend validation for minimum deposit (equivalent to $10)
         if (amountUSD < 10) {
             setMessage('Minimum deposit equivalent is $10 USD.');
             return;
@@ -52,7 +60,7 @@ const Deposit: React.FC = () => {
             };
 
             const { data } = await axios.post(
-                'http://localhost:5000/api/deposits',
+                `${API_BASE_URL}/api/deposits`, // <-- FIXED URL
                 // Send generic amount and selected method
                 { amount, method }, 
                 config
@@ -60,7 +68,7 @@ const Deposit: React.FC = () => {
 
             setMessage(data.message);
             
-            // Update the global user state with the new balance
+            // Update the global user state with the new balance (assuming the backend sends the new balance)
             dispatch({ type: 'UPDATE_PROFILE', payload: { piCoinsBalance: data.piCoinsBalance } });
 
             setTimeout(() => navigate('/dashboard'), 2000);
@@ -68,7 +76,9 @@ const Deposit: React.FC = () => {
         } catch (error) {
             let errorMessage = 'An unexpected error occurred.';
             if (axios.isAxiosError(error) && error.response) {
-                errorMessage = error.response.data.message || 'Deposit failed.';
+                // Ensure we handle case where response.data is an object with a message property
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                errorMessage = (error.response.data as any).message || 'Deposit failed.';
             }
             setMessage(`Error: ${errorMessage}`);
         } finally {
@@ -86,7 +96,7 @@ const Deposit: React.FC = () => {
             </h2>
             <div className='mb-4 text-center'>
                 <p className="text-gray-300">Current Balance: <span className="text-pi-green-alt font-bold">{userInfo.piCoinsBalance.toFixed(2)} P$</span></p>
-                <p className="text-sm text-gray-400">Rate: $1 USD = {USD_TO_PI_RATE} P$ | ₦1,000 ≈ $1 USD</p>
+                <p className="text-sm text-gray-400">Rate: $1 USD = {USD_TO_PI_RATE} P$ | ₦{Math.round(1 / NGN_TO_USD_RATE).toLocaleString()} ≈ $1 USD (Est.)</p>
             </div>
 
             {message && (

@@ -1,14 +1,19 @@
-// client/src/pages/Login.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// client/src/pages/Login.tsx (FINAL PRODUCTION READY)
 
 import React, { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
 import axios from 'axios';
 import type { User } from '../types/userTypes';
-import { useAuth } from '../context/AuthContext'; // NEW IMPORT
+import { useAuth } from '../context/AuthContext'; 
 
+// --- CONFIGURATION ---
+// Use the environment variable for the base URL.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// --- END CONFIGURATION ---
 
-const API_URL = 'http://localhost:5000/api/users/login'; // Ensure this matches your backend PORT
+const API_URL = `${API_BASE_URL}/api/users/login`; // <-- FIXED URL
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState<string>('');
@@ -16,7 +21,13 @@ const Login: React.FC = () => {
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, userInfo } = useAuth(); // Also extract userInfo to check if already logged in
+
+  // Early return if user is already logged in
+  if (userInfo) {
+      navigate('/dashboard');
+      return null;
+  }
 
   const submitHandler = async (e: FormEvent) => {
     e.preventDefault();
@@ -37,15 +48,18 @@ const Login: React.FC = () => {
         config
       );
 
-      // --- CRUCIAL CHANGE HERE ---
-      login(data); // Use the context login function
+      // Use the context login function, which saves the user data and token
+      login(data); 
       setMessage('Login successful! Redirecting to dashboard...');
-      navigate('/dashboard');
+      
+      // Navigate after a slight delay to allow message to show
+      setTimeout(() => navigate('/dashboard'), 500);
 
     } catch (error) {
         let errorMessage = 'An unexpected error occurred.';
         if (axios.isAxiosError(error) && error.response) {
-            errorMessage = error.response.data.message || error.response.data.error || 'Invalid Credentials';
+            // Check for common error structure from backend
+            errorMessage = (error.response.data as any).message || (error.response.data as any).error || 'Invalid Credentials';
         }
       setMessage(errorMessage);
     } finally {

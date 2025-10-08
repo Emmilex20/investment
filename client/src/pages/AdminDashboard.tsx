@@ -1,9 +1,16 @@
-// client/src/pages/AdminDashboard.tsx (UPDATED CODE)
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// client/src/pages/AdminDashboard.tsx (FINAL PRODUCTION READY)
 
 import React, { useEffect, useState, type FormEvent, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+
+// --- CONFIGURATION ---
+// Use the environment variable for the base URL. Fallback to localhost for safety.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// --- END CONFIGURATION ---
+
 
 interface AdminUserView {
     _id: string;
@@ -53,16 +60,15 @@ const AdminDashboard: React.FC = () => {
         }
     }, [userInfo, navigate]);
 
-    // **IMPORTANT FIX: Extract token and isAdmin for stable dependencies**
+    // **FIX: Extract token and isAdmin for stable dependencies**
     const token = userInfo?.token;
     const isAdmin = userInfo?.isAdmin;
 
 
-    // --- API Fetch Functions (FIXED Dependencies in useCallback) ---
+    // --- API Fetch Functions (Using useCallback and Production URL) ---
 
     // 1. Fetch All Users
     const fetchUsers = useCallback(async () => {
-        // Use isAdmin and token directly
         if (!isAdmin || !token) { 
             setLoading(false);
             return; 
@@ -71,9 +77,9 @@ const AdminDashboard: React.FC = () => {
         setError(null);
         try {
             const config = {
-                headers: { Authorization: `Bearer ${token}` }, // Use extracted token
+                headers: { Authorization: `Bearer ${token}` },
             };
-            const { data } = await axios.get<AdminUserView[]>('http://localhost:5000/api/users/admin/all-users', config);
+            const { data } = await axios.get<AdminUserView[]>(`${API_BASE_URL}/api/users/admin/all-users`, config);
             setUsers(data);
         } catch (err) {
             let errorMessage = 'Failed to load user list.';
@@ -84,11 +90,10 @@ const AdminDashboard: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [isAdmin, token]); // **FIXED DEPENDENCY: Only include isAdmin and token**
+    }, [isAdmin, token]); // Dependencies are clean
 
     // 2. Fetch Pending Withdrawal Requests
     const fetchWithdrawals = useCallback(async () => {
-        // Use isAdmin and token directly
         if (!isAdmin || !token) { 
             setWithdrawalLoading(false);
             return;
@@ -97,34 +102,30 @@ const AdminDashboard: React.FC = () => {
         setWithdrawalError(null);
         try {
             const config = {
-                headers: { Authorization: `Bearer ${token}` }, // Use extracted token
+                headers: { Authorization: `Bearer ${token}` },
             };
-            const { data } = await axios.get<WithdrawalRequest[]>('http://localhost:5000/api/transactions/admin/withdrawals', config);
+            const { data } = await axios.get<WithdrawalRequest[]>(`${API_BASE_URL}/api/transactions/admin/withdrawals`, config);
             setWithdrawalRequests(data); 
         } catch (err) {
             let errorMessage = 'Failed to fetch withdrawal requests.';
             if (axios.isAxiosError(err) && err.response && err.response.data) {
-                errorMessage = err.response.data.message || errorMessage;
+                // Ensure we handle case where response.data is an object with a message property
+                errorMessage = (err.response.data as any).message || errorMessage; 
             }
             setWithdrawalError(`Error fetching withdrawals: ${errorMessage}`);
         } finally {
             setWithdrawalLoading(false);
         }
-    }, [isAdmin, token]); // **FIXED DEPENDENCY: Only include isAdmin and token**
+    }, [isAdmin, token]); // Dependencies are clean
 
 
-    // --- Initial Data Load Effect (Final Dependencies) ---
+    // --- Initial Data Load Effect ---
     useEffect(() => {
-        // Use extracted isAdmin, as fetchUsers and fetchWithdrawals are now stable
         if (isAdmin) {
             fetchUsers();
             fetchWithdrawals(); 
         }
-    }, [isAdmin, fetchUsers, fetchWithdrawals]); // **FIXED DEPENDENCY ARRAY**
-
-    // ... (Rest of the component code remains the same as it uses fetchUsers/fetchWithdrawals) ...
-    // Note: handleCreditSubmit and updateWithdrawalStatus still use userInfo?.token directly 
-    // but they are event handlers, not direct dependencies of useEffect, so they are fine.
+    }, [isAdmin, fetchUsers, fetchWithdrawals]); 
 
     // --- Pi Coin Distribution Handler ---
     const handleCreditSubmit = async (e: FormEvent) => {
@@ -140,12 +141,12 @@ const AdminDashboard: React.FC = () => {
             const config = {
                 headers: { 
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}` // Use extracted token
+                    Authorization: `Bearer ${token}` 
                 },
             };
             
             const { data } = await axios.post<{ message: string, newBalance: number }>(
-                'http://localhost:5000/api/users/admin/add-coins',
+                `${API_BASE_URL}/api/users/admin/add-coins`, // <-- FIXED URL
                 creditData,
                 config
             );
@@ -160,14 +161,14 @@ const AdminDashboard: React.FC = () => {
                  });
             }
             
-            await fetchUsers(); // Safe to call due to useCallback
+            await fetchUsers(); // Re-fetch user list to show updated balance
             
             setCreditData({ userId: '', amount: 0 });
 
         } catch (err) {
             let errorMessage = 'Coin distribution failed.';
             if (axios.isAxiosError(err) && err.response) {
-                errorMessage = err.response.data.message || 'Server Error.';
+                errorMessage = (err.response.data as any).message || 'Server Error.';
             }
             setCreditMessage(`Error: ${errorMessage}`);
         } finally {
@@ -182,7 +183,8 @@ const AdminDashboard: React.FC = () => {
         if (!isAdmin || !token) return;
 
         const actionText = status === 'Processed' ? 'Processing' : 'Rejecting';
-        const endpoint = `http://localhost:5000/api/transactions/admin/withdrawals/${id}/${status.toLowerCase()}`;
+        // <-- FIXED URL
+        const endpoint = `${API_BASE_URL}/api/transactions/admin/withdrawals/${id}/${status.toLowerCase()}`;
         
         if (!window.confirm(`Are you sure you want to ${actionText.toLowerCase()} this withdrawal (ID: ${id})?`)) {
             return;
@@ -191,7 +193,7 @@ const AdminDashboard: React.FC = () => {
         try {
             const config = {
                 headers: { 
-                    Authorization: `Bearer ${token}` // Use extracted token
+                    Authorization: `Bearer ${token}` 
                 },
             };
             
@@ -201,13 +203,13 @@ const AdminDashboard: React.FC = () => {
             alert(`${actionText} successful: ${data.message}`);
             
             // Refresh the withdrawal list and user balances
-            fetchWithdrawals(); // Safe to call due to useCallback
-            fetchUsers(); // Safe to call due to useCallback
+            fetchWithdrawals(); 
+            fetchUsers(); 
 
         } catch (err) {
             let errorMessage = `${actionText} failed.`;
             if (axios.isAxiosError(err) && err.response) {
-                errorMessage = err.response.data.message || 'Server Error.';
+                errorMessage = (err.response.data as any).message || 'Server Error.';
             }
             alert(`Error during ${actionText}: ${errorMessage}`);
         }
@@ -218,9 +220,9 @@ const AdminDashboard: React.FC = () => {
     
     // ----------------------------------------------------
 
+    if (!isAdmin) return null; // Should be redirected, but safe check
     if (loading) return <div className="text-xl text-red-500 mt-10">Loading Admin Dashboard...</div>;
     if (error) return <div className="text-xl text-red-500 mt-10">Error: {error}</div>;
-    if (!isAdmin) return null; // Should be redirected, but safe check
 
     const cardClass = "bg-white/10 p-4 rounded-lg shadow-lg";
 
@@ -235,14 +237,14 @@ const AdminDashboard: React.FC = () => {
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-300 mb-1">Select User</label>
                         <select
-                            className="w-full p-2 rounded-md bg-white/20 border border-red-500/40 text-gray-800 focus:outline-none"
+                            className="w-full p-2 rounded-md bg-white/20 border border-red-500/40 text-white focus:outline-none"
                             value={creditData.userId}
                             onChange={(e) => setCreditData({ ...creditData, userId: e.target.value })}
                             required
                         >
                             <option value="" disabled>-- Select User --</option>
                             {users.map((user: AdminUserView) => (
-                                <option key={user._id} value={user._id}>
+                                <option key={user._id} value={user._id} className="text-gray-800">
                                     {user.name} ({user.email}) - {user.piCoinsBalance.toFixed(2)} P$
                                 </option>
                             ))}
