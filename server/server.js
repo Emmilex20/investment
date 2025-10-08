@@ -26,7 +26,10 @@ const app = express();
 // Middleware
 app.use(express.json()); // Allows parsing of JSON request body
 // Configure CORS to only allow the client's URL
-const clientUrl = process.env.NODE_ENV === 'production' ? 'https://your-production-url.com' : 'http://localhost:5173';
+const clientUrl = process.env.NODE_ENV === 'production' 
+    ? process.env.CLIENT_URL 
+    : 'http://localhost:5173';
+
 app.use(cors({ origin: clientUrl }));
 
 // Simple test route
