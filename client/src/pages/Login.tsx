@@ -1,129 +1,165 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// client/src/pages/Login.tsx (FINAL PRODUCTION READY)
+// client/src/pages/Login.tsx (ULTIMATE PROFESSIONAL DESIGN)
 
-import React, { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import AuthCard from '../components/AuthCard';
-import axios from 'axios';
-import type { User } from '../types/userTypes';
-import { useAuth } from '../context/AuthContext'; 
+import React, { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { motion } from "framer-motion";
+import { useAuth } from "../context/AuthContext";
+import type { User } from "../types/userTypes";
 
-// --- CONFIGURATION ---
-// Use the environment variable for the base URL.
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-// --- END CONFIGURATION ---
-
-const API_URL = `${API_BASE_URL}/api/users/login`; // <-- FIXED URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = `${API_BASE_URL}/api/users/login`;
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [message, setMessage] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login, userInfo } = useAuth(); // Also extract userInfo to check if already logged in
+  const { login, userInfo } = useAuth();
 
-  // Early return if user is already logged in
   if (userInfo) {
-      navigate('/dashboard');
-      return null;
+    navigate("/dashboard");
+    return null;
   }
 
-  const submitHandler = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setMessage('');
+    setMessage("");
     setLoading(true);
-
     try {
-      const config = {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      };
-
-      // Send the request to the backend
       const { data } = await axios.post<User>(
         API_URL,
         { email, password },
-        config
+        { headers: { "Content-Type": "application/json" } }
       );
-
-      // Use the context login function, which saves the user data and token
-      login(data); 
-      setMessage('Login successful! Redirecting to dashboard...');
-      
-      // Navigate after a slight delay to allow message to show
-      setTimeout(() => navigate('/dashboard'), 500);
-
+      login(data);
+      setMessage("✅ Login successful! Redirecting...");
+      setTimeout(() => navigate("/dashboard"), 800);
     } catch (error) {
-        let errorMessage = 'An unexpected error occurred.';
-        if (axios.isAxiosError(error) && error.response) {
-            // Check for common error structure from backend
-            errorMessage = (error.response.data as any).message || (error.response.data as any).error || 'Invalid Credentials';
-        }
+      let errorMessage = "❌ Invalid credentials or network issue.";
+      if (axios.isAxiosError(error) && error.response) {
+        errorMessage =
+          (error.response.data as any).message ||
+          (error.response.data as any).error ||
+          errorMessage;
+      }
       setMessage(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const inputClass = "w-full p-3 rounded-md bg-white/20 border border-pi-accent/40 text-white placeholder-gray-400 focus:outline-none focus:border-pi-accent/80 transition duration-150";
-  const labelClass = "block text-sm font-medium text-gray-300 mb-1";
-
   return (
-    <div className="flex justify-center">
-      <AuthCard title="Sign In">
+    <div className="relative min-h-screen flex items-center justify-center bg-[#0F051D] overflow-hidden">
+      {/* ===== BACKGROUND EFFECTS ===== */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-indigo-900 to-black opacity-80"></div>
+
+      {/* Glowing Orbs */}
+      <div className="absolute -top-40 -left-40 w-[450px] h-[450px] bg-purple-600/30 rounded-full blur-[180px] animate-pulse"></div>
+      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-indigo-500/20 rounded-full blur-[180px] animate-pulse delay-1000"></div>
+
+      {/* ===== GLASS CARD ===== */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 30 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="relative z-10 w-[90%] max-w-md backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 sm:p-10 shadow-2xl text-center"
+      >
+        {/* Header */}
+        <h1 className="text-4xl font-extrabold text-white mb-3 tracking-wide">
+          Welcome Back
+        </h1>
+        <p className="text-gray-400 mb-8 text-sm sm:text-base">
+          Access your <span className="text-purple-300 font-semibold">Pi Investment</span> account
+        </p>
+
+        {/* Feedback Message */}
         {message && (
-          <div className={`p-3 mb-4 rounded ${message.includes('successful') ? 'bg-pi-green-alt/20 text-pi-green-alt' : 'bg-red-900/40 text-red-400'}`}>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`p-3 mb-6 rounded-md text-sm ${
+              message.includes("✅")
+                ? "bg-green-900/40 text-green-300"
+                : "bg-red-900/40 text-red-300"
+            }`}
+          >
             {message}
-          </div>
+          </motion.div>
         )}
-        <form onSubmit={submitHandler}>
-          {/* Email */}
-          <div className="mb-4">
-            <label className={labelClass} htmlFor="email">Email Address</label>
+
+        {/* ===== FORM ===== */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="text-left">
+            <label
+              htmlFor="email"
+              className="block text-xs font-semibold uppercase tracking-wide text-purple-200 mb-2"
+            >
+              Email Address
+            </label>
             <input
-              type="email"
               id="email"
-              placeholder="Enter email"
+              type="email"
               value={email}
+              placeholder="Enter your email"
               onChange={(e) => setEmail(e.target.value)}
-              className={inputClass}
+              className="w-full p-3 rounded-lg bg-white/10 border border-purple-500/30 text-white placeholder-gray-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-500/30 transition duration-300"
               required
             />
           </div>
 
-          {/* Password */}
-          <div className="mb-6">
-            <label className={labelClass} htmlFor="password">Password</label>
+          <div className="text-left">
+            <label
+              htmlFor="password"
+              className="block text-xs font-semibold uppercase tracking-wide text-purple-200 mb-2"
+            >
+              Password
+            </label>
             <input
-              type="password"
               id="password"
-              placeholder="Enter password"
+              type="password"
               value={password}
+              placeholder="Enter your password"
               onChange={(e) => setPassword(e.target.value)}
-              className={inputClass}
+              className="w-full p-3 rounded-lg bg-white/10 border border-purple-500/30 text-white placeholder-gray-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-500/30 transition duration-300"
               required
             />
           </div>
 
-          {/* Submit Button */}
-          <button
+          {/* Button */}
+          <motion.button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-md font-bold text-white bg-pi-accent hover:bg-pi-accent/80 transition duration-300 disabled:opacity-50"
+            whileHover={{ scale: loading ? 1 : 1.05 }}
+            whileTap={{ scale: 0.97 }}
+            className="w-full mt-4 py-3 font-bold text-lg rounded-lg text-white bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-700 hover:from-purple-600 hover:via-indigo-600 hover:to-purple-800 shadow-xl shadow-purple-800/40 transition duration-300 disabled:opacity-60"
           >
-            {loading ? 'Logging In...' : 'Login'}
-          </button>
+            {loading ? "Logging In..." : "Sign In"}
+          </motion.button>
         </form>
 
-        <div className="mt-6 text-center text-gray-400">
-          New User?{' '}
-          <Link to="/register" className="text-pi-accent font-semibold hover:underline">
-            Register Here
+        {/* ===== Footer Links ===== */}
+        <div className="mt-6 text-sm text-gray-400">
+          New user?{" "}
+          <Link
+            to="/register"
+            className="text-purple-400 hover:text-purple-300 font-semibold transition underline-offset-2 hover:underline"
+          >
+            Create an account
           </Link>
         </div>
-      </AuthCard>
+
+        <div className="mt-4 text-xs text-gray-500">
+          <Link
+            to="/forgot-password"
+            className="hover:text-purple-300 transition"
+          >
+            Forgot Password?
+          </Link>
+        </div>
+      </motion.div>
     </div>
   );
 };

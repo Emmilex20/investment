@@ -20,5 +20,6 @@
 }
 
 .animate-slideDown {
-  animation: slideDown 0.25s ease-out;
+  animation: slideDown 0.3s ease forwards;
 }
+
