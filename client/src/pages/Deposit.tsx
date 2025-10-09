@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// client/src/pages/Deposit.tsx (FINAL PRODUCTION READY - STYLED + ANIMATED)
+// client/src/pages/Deposit.tsx (FINAL PRODUCTION READY - STYLED + ANIMATED + BACK BUTTON)
 
 import React, { useState, type FormEvent, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { motion } from "framer-motion";
-import { UploadCloud, ArrowRightCircle } from "lucide-react";
+import { UploadCloud, ArrowRightCircle, ArrowLeftCircle } from "lucide-react";
 
 // --- CONFIGURATION ---
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -59,8 +59,7 @@ const Deposit: React.FC = () => {
 
   // --- UPDATED RATES ---
   const USD_TO_PI_RATE = 100;
-  // $1 = ₦1400, so ₦1 = 1/1400 USD
-  const NGN_TO_USD_RATE = 1 / 1400; // ~0.000714
+  const NGN_TO_USD_RATE = 1 / 1400;
   // --- END UPDATED RATES ---
 
   const amountUSD = method === "naira" ? amount * NGN_TO_USD_RATE : amount;
@@ -96,8 +95,7 @@ const Deposit: React.FC = () => {
 
       const { data } = await axios.post(`${API_BASE_URL}/api/deposits`, formData, config);
       setMessage(`✅ ${data.message}`);
-      // Adjusted default amount for Naira to align with a more standard minimum ($10 USD equivalent)
-      setAmount(method === "naira" ? 14000 : 10); 
+      setAmount(method === "naira" ? 14000 : 10);
       setReceiptFile(null);
 
       setTimeout(() => navigate("/dashboard"), 2500);
@@ -121,8 +119,7 @@ const Deposit: React.FC = () => {
   const isNairaDetails = (details: UsdtDetails | NairaDetails): details is NairaDetails =>
     (details as NairaDetails).bank !== undefined;
 
-  // New minimum deposit check logic for display
-  const minNairaDeposit = Math.ceil(10 / NGN_TO_USD_RATE); // Minimum ₦ amount to get $10
+  const minNairaDeposit = Math.ceil(10 / NGN_TO_USD_RATE);
 
   return (
     <motion.div
@@ -175,14 +172,13 @@ const Deposit: React.FC = () => {
           <div>
             <label className="block text-sm text-gray-300 mb-1">Payment Method</label>
             <div className="flex gap-4">
-              {([`usdt`, `naira`] as const).map((opt) => (
+              {(["usdt", "naira"] as const).map((opt) => (
                 <motion.button
                   key={opt}
                   type="button"
                   onClick={() => {
                     setMethod(opt);
-                    // Update default amount for the new rate
-                    setAmount(opt === "naira" ? 14000 : 10); 
+                    setAmount(opt === "naira" ? 14000 : 10);
                     setReceiptFile(null);
                   }}
                   className={`flex-1 py-3 rounded-md font-semibold transition duration-200 ${
@@ -242,7 +238,6 @@ const Deposit: React.FC = () => {
               type="number"
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
-              // Update minimum for display
               min={method === "naira" ? minNairaDeposit : 10}
               step={method === "naira" ? 1000 : 5}
               className={inputClass}
@@ -279,6 +274,7 @@ const Deposit: React.FC = () => {
             </p>
           </motion.div>
 
+          {/* Submit Button */}
           <motion.button
             type="submit"
             disabled={loading || !receiptFile}
@@ -287,6 +283,18 @@ const Deposit: React.FC = () => {
           >
             {loading ? "Processing..." : "Submit Deposit Request"}
             {!loading && <ArrowRightCircle className="inline-block ml-2 w-5 h-5" />}
+          </motion.button>
+
+          {/* BACK TO DASHBOARD BUTTON */}
+          <motion.button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            className="w-full py-3 mt-3 rounded-md font-semibold text-white bg-gradient-to-r from-blue-500/80 to-indigo-600/80 hover:from-indigo-600 hover:to-blue-500 transition-all duration-500 shadow-lg hover:shadow-indigo-500/30 flex justify-center items-center gap-2"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <ArrowLeftCircle className="w-5 h-5" />
+            Back to Dashboard
           </motion.button>
         </form>
       </motion.div>

@@ -1,151 +1,197 @@
-// client/src/pages/Transfer.tsx (FINAL PRODUCTION READY)
-import React, { useState, type FormEvent } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// client/src/pages/Transfer.tsx (FINAL PRODUCTION READY - STYLED + ANIMATED)
+
+import React, { useState, type FormEvent } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import { motion } from "framer-motion";
+import { ArrowLeftCircle, SendHorizonal } from "lucide-react";
 
 // --- CONFIGURATION ---
-// Use the environment variable for the base URL.
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 // --- END CONFIGURATION ---
 
 const Transfer: React.FC = () => {
-    // 1. ALL HOOKS MUST BE AT THE TOP (UNCONDITIONAL)
-    const { userInfo, dispatch } = useAuth();
-    const navigate = useNavigate();
-    
-    const [recipientEmail, setRecipientEmail] = useState<string>('');
-    const [amount, setAmount] = useState<number>(0);
-    const [message, setMessage] = useState<string>('');
-    const [loading, setLoading] = useState<boolean>(false);
+  const { userInfo, dispatch } = useAuth();
+  const navigate = useNavigate();
 
-    // 2. Conditional check and early return go AFTER all hooks
-    if (!userInfo) {
-        navigate('/login');
-        return null; 
+  const [recipientEmail, setRecipientEmail] = useState<string>("");
+  const [amount, setAmount] = useState<number>(0);
+  const [message, setMessage] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+
+  if (!userInfo) {
+    navigate("/login");
+    return null;
+  }
+
+  const submitHandler = async (e: FormEvent) => {
+    e.preventDefault();
+    setMessage("");
+
+    if (amount <= 0 || !recipientEmail) {
+      setMessage("Please enter a valid email and amount greater than zero.");
+      return;
     }
 
-    const submitHandler = async (e: FormEvent) => {
-        e.preventDefault();
-        setMessage('');
-        
-        if (amount <= 0 || !recipientEmail) {
-            setMessage('Please enter a valid email and amount greater than zero.');
-            return;
-        }
+    if (amount > userInfo.piCoinsBalance) {
+      setMessage("Insufficient balance for this transfer.");
+      return;
+    }
 
-        // Use optional chaining for safety, though userInfo is guaranteed here
-        if (amount > userInfo.piCoinsBalance) {
-            setMessage('Insufficient balance for this transfer.');
-            return;
-        }
+    setLoading(true);
 
-        setLoading(true);
+    try {
+      const config = {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userInfo.token}`,
+        },
+      };
 
-        try {
-            const config = {
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${userInfo.token}`,
-                },
-            };
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/users/transfer`,
+        { recipientEmail, amount },
+        config
+      );
 
-            const { data } = await axios.post(
-                `${API_BASE_URL}/api/users/transfer`, // <-- FIXED URL
-                { recipientEmail, amount },
-                config
-            );
+      setMessage(`✅ ${data.message}`);
+      dispatch({
+        type: "UPDATE_PROFILE",
+        payload: { piCoinsBalance: data.newBalance },
+      });
 
-            setMessage(data.message);
-            
-            // Update the global user state with the new balance
-            dispatch({ type: 'UPDATE_PROFILE', payload: { piCoinsBalance: data.newBalance } });
+      setAmount(0);
+      setRecipientEmail("");
+    } catch (error) {
+      let errorMessage = "An unexpected error occurred.";
+      if (axios.isAxiosError(error) && error.response) {
+        errorMessage =
+          (error.response.data as any).message || "Transfer failed.";
+      }
+      setMessage(`❌ ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            // Reset fields
-            setAmount(0);
-            setRecipientEmail('');
-            
-        } catch (error) {
-            let errorMessage = 'An unexpected error occurred.';
-            if (axios.isAxiosError(error) && error.response) {
-                // Check for common error structure from backend
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                errorMessage = (error.response.data as any).message || 'Transfer failed.';
-            }
-            setMessage(`Error: ${errorMessage}`);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const inputClass =
+    "w-full p-3 rounded-md bg-white/20 border border-pi-accent/40 text-white placeholder-gray-400 focus:outline-none focus:border-pi-accent/80 transition duration-150";
+  const buttonClass =
+    "w-full py-3 rounded-md font-bold text-white bg-gradient-to-r from-pi-accent to-pi-green-alt hover:from-pi-green-alt hover:to-pi-accent transition-all duration-500 shadow-lg shadow-pi-accent/20 hover:shadow-pi-green-alt/30 disabled:opacity-50";
 
-    const inputClass = "w-full p-3 rounded-md bg-white/20 border border-pi-accent/40 text-white placeholder-gray-400 focus:outline-none focus:border-pi-accent/80 transition duration-150";
-    const buttonClass = "w-full py-3 rounded-md font-bold text-white bg-pi-accent hover:bg-pi-accent/80 transition duration-300 disabled:opacity-50";
+  return (
+    <motion.div
+      className="w-full flex justify-center items-center px-4 py-10"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6 }}
+    >
+      <motion.div
+        className="w-full max-w-lg p-6 bg-gradient-to-b from-[#1a103d]/90 to-[#12092c]/90 rounded-2xl border border-pi-accent/50 shadow-[0_0_30px_-5px_rgba(124,58,237,0.4)] backdrop-blur-md"
+        whileHover={{ scale: 1.01 }}
+      >
+        <h2 className="text-3xl font-extrabold text-center text-pi-accent mb-6">
+          Transfer Pi Coins 🚀
+        </h2>
 
-    return (
-        <div className="w-full max-w-lg p-4 bg-white/10 rounded-xl shadow-2xl backdrop-blur-sm border border-pi-accent/50">
-            <h2 className="text-3xl font-bold text-white text-center mb-6">
-                Pi Coin Transfer
-            </h2>
-            <div className='mb-6 text-center'>
-                <p className="text-lg text-gray-300">
-                    Your Balance: <span className="text-pi-green-alt font-bold">{userInfo.piCoinsBalance.toFixed(2)} P$</span>
-                </p>
-            </div>
+        {/* Current Balance */}
+        <motion.div
+          className="mb-6 text-center bg-white/5 py-3 rounded-lg border border-white/10"
+          whileHover={{ scale: 1.02 }}
+        >
+          <p className="text-gray-300">
+            Current Balance:{" "}
+            <span className="text-pi-green-alt font-bold">
+              {userInfo.piCoinsBalance.toFixed(2)} P$
+            </span>
+          </p>
+        </motion.div>
 
-            {message && (
-                <div className={`p-3 mb-4 rounded ${message.includes('Successfully transferred') ? 'bg-pi-green-alt/20 text-pi-green-alt' : 'bg-red-900/40 text-red-400'}`}>
-                    {message}
-                </div>
-            )}
+        {message && (
+          <motion.div
+            className={`p-3 mb-4 rounded-lg text-center text-sm ${
+              message.includes("✅")
+                ? "bg-green-900/40 text-pi-green-alt"
+                : "bg-red-900/40 text-red-400"
+            }`}
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {message}
+          </motion.div>
+        )}
 
-            <form onSubmit={submitHandler}>
-                {/* Recipient Email */}
-                <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="recipientEmail">Recipient Email</label>
-                    <input
-                        type="email"
-                        id="recipientEmail"
-                        placeholder="Enter recipient's email"
-                        value={recipientEmail}
-                        onChange={(e) => setRecipientEmail(e.target.value)}
-                        className={inputClass}
-                        required
-                    />
-                </div>
+        <form onSubmit={submitHandler} className="space-y-5">
+          {/* Recipient Email */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">
+              Recipient Email
+            </label>
+            <input
+              type="email"
+              placeholder="Enter recipient's email"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </div>
 
-                {/* Amount */}
-                <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="amount">Amount (P$)</label>
-                    <input
-                        type="number"
-                        id="amount"
-                        placeholder="e.g., 1000"
-                        value={amount}
-                        onChange={(e) => setAmount(Number(e.target.value))}
-                        min="1"
-                        step="1"
-                        className={inputClass}
-                        required
-                    />
-                </div>
+          {/* Amount */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">
+              Amount (P$)
+            </label>
+            <input
+              type="number"
+              placeholder="e.g., 1000"
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              min="1"
+              step="1"
+              className={inputClass}
+              required
+            />
+          </div>
 
-                <button
-                    type="submit"
-                    disabled={loading}
-                    className={buttonClass}
-                >
-                    {loading ? 'Processing Transfer...' : `Transfer ${amount.toFixed(2)} P$`}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => navigate('/dashboard')}
-                    className="w-full mt-3 py-3 rounded-md font-bold text-gray-400 bg-white/5 hover:bg-white/10 transition duration-300"
-                >
-                    Cancel
-                </button>
-            </form>
-        </div>
-    );
+          {/* Transfer Summary */}
+          <motion.div
+            className="p-3 bg-white/10 rounded-md border border-white/20 text-gray-300"
+            whileHover={{ scale: 1.02 }}
+          >
+            You’re sending{" "}
+            <span className="text-pi-accent font-bold">{amount} P$</span> to{" "}
+            <span className="text-yellow-300 font-semibold">
+              {recipientEmail || "—"}
+            </span>
+          </motion.div>
+
+          {/* Buttons */}
+          <motion.button
+            type="submit"
+            disabled={loading}
+            className={buttonClass}
+            whileTap={{ scale: 0.97 }}
+          >
+            {loading ? "Processing..." : "Send Transfer"}
+            {!loading && <SendHorizonal className="inline-block ml-2 w-5 h-5" />}
+          </motion.button>
+
+          {/* Back to Dashboard */}
+          <motion.button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            className="w-full mt-3 py-3 rounded-md font-bold text-gray-400 bg-white/5 hover:bg-white/10 hover:text-white transition-all duration-300 flex items-center justify-center gap-2"
+            whileTap={{ scale: 0.97 }}
+          >
+            <ArrowLeftCircle className="w-5 h-5" /> Back to Dashboard
+          </motion.button>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
 };
 
 export default Transfer;

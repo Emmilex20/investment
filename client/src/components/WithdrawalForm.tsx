@@ -5,8 +5,9 @@
 import React, { useState, type FormEvent, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-// Import a check/x icon for better visual feedback
-import { CheckCircle, XCircle } from 'lucide-react'; 
+import { useNavigate } from "react-router-dom";
+import { ArrowLeftCircle, CheckCircle, XCircle } from 'lucide-react'; 
+import { motion } from 'framer-motion';
 
 // Hardcoded Payout Parameters
 const MIN_WITHDRAWAL_AMOUNT = 10; // Minimum P$ to withdraw
@@ -31,6 +32,7 @@ const WithdrawalForm: React.FC = () => {
     const { userInfo, dispatch } = useAuth();
     const [amount, setAmount] = useState<number>(0);
     const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('NAIRA_BANK');
+    const navigate = useNavigate();
     
     // Dynamic fields for different payout methods
     const [bankName, setBankName] = useState('');
@@ -390,6 +392,16 @@ const WithdrawalForm: React.FC = () => {
                 >
                     {loading ? 'Submitting Request...' : `Withdraw ${amount.toFixed(2) || '0.00'} P$`}
                 </button>
+                <motion.button
+                            type="button"
+                            onClick={() => navigate("/dashboard")}
+                            className="w-full py-3 mt-3 rounded-md font-semibold text-white bg-gradient-to-r from-blue-500/80 to-indigo-600/80 hover:from-indigo-600 hover:to-blue-500 transition-all duration-500 shadow-lg hover:shadow-indigo-500/30 flex justify-center items-center gap-2"
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.95 }}
+                          >
+                            <ArrowLeftCircle className="w-5 h-5" />
+                            Back to Dashboard
+                          </motion.button>
             </form>
 
             {/* Message Display (now submissionMessage) */}
