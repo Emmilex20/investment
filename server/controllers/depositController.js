@@ -2,11 +2,14 @@
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import DepositRequest from '../models/DepositRequest.js'; 
-import { v2 as cloudinary } from 'cloudinary'; // Import for cleanup/rejection logic
+import { v2 as cloudinary } from 'cloudinary'; 
 
 // Constant for simulated conversion rate
 const USD_TO_PI_RATE = 100;
-const NGN_TO_USD_RATE = 0.001; 
+// --- UPDATED RATE ---
+// $1 = ₦1400, so ₦1 = 1/1400 USD
+const NGN_TO_USD_RATE = 1 / 1400; // ~0.000714
+// --- END UPDATED RATE ---
 
 /**
  * Helper function to delete the receipt file from Cloudinary safely.
@@ -69,6 +72,7 @@ const createDeposit = asyncHandler(async (req, res) => {
         amountUSD = inputAmount; 
         currency = 'USD';
     } else if (method === 'naira') {
+        // USE UPDATED RATE
         amountUSD = inputAmount * NGN_TO_USD_RATE; 
         currency = 'NGN';
     } else {

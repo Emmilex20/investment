@@ -1,263 +1,297 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// client/src/pages/Deposit.tsx (FINAL PRODUCTION READY with Receipt Upload)
+// client/src/pages/Deposit.tsx (FINAL PRODUCTION READY - STYLED + ANIMATED)
 
-import React, { useState, type FormEvent, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import React, { useState, type FormEvent, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import { motion } from "framer-motion";
+import { UploadCloud, ArrowRightCircle } from "lucide-react";
 
 // --- CONFIGURATION ---
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 // --- END CONFIGURATION ---
 
-// Define specific types for clarity
 interface UsdtDetails {
-    address: string;
-    network: string;
-    note: string;
+  address: string;
+  network: string;
+  note: string;
 }
 
 interface NairaDetails {
-    bank: string;
-    accountName: string;
-    accountNumber: string;
-    note: string;
+  bank: string;
+  accountName: string;
+  accountNumber: string;
+  note: string;
 }
 
-// Define the shape of the deposit details object
-const depositDetails: { usdt: UsdtDetails, naira: NairaDetails } = {
-    usdt: {
-        address: 'TDt9...KjQp',
-        network: 'TRC-20 (Tron)',
-        note: 'Send USDT (TRC-20) to the address above. Deposits are reviewed manually.',
-    },
-    naira: {
-        bank: 'Access Bank',
-        accountName: 'PI INVESTMENT LIMITED',
-        accountNumber: '0001234567',
-        note: 'Transfer the exact amount and upload your payment receipt below for confirmation.',
-    }
+const depositDetails: { usdt: UsdtDetails; naira: NairaDetails } = {
+  usdt: {
+    address: "TDt9...KjQp",
+    network: "TRC-20 (Tron)",
+    note: "Send USDT (TRC-20) to the address above. Deposits are reviewed manually.",
+  },
+  naira: {
+    bank: "Access Bank",
+    accountName: "PI INVESTMENT LIMITED",
+    accountNumber: "0001234567",
+    note: "Transfer the exact amount and upload your payment receipt below for confirmation.",
+  },
 };
 
 const Deposit: React.FC = () => {
-    // 1. ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP
-    // FIX 2: Removed 'dispatch' as it's no longer used for immediate balance updates
-    const { userInfo } = useAuth(); 
-    const navigate = useNavigate();
+  const { userInfo } = useAuth();
+  const navigate = useNavigate();
 
-    // All useState calls
-    const [amount, setAmount] = useState<number>(10);
-    const [method, setMethod] = useState<'usdt' | 'naira'>('usdt');
-    const [receiptFile, setReceiptFile] = useState<File | null>(null); // New state for the receipt
-    const [message, setMessage] = useState<string>('');
-    const [loading, setLoading] = useState<boolean>(false);
+  const [amount, setAmount] = useState<number>(10);
+  const [method, setMethod] = useState<"usdt" | "naira">("usdt");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [message, setMessage] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
-    // 2. Conditional return now executes AFTER all hooks have been called
-    useEffect(() => {
-        if (!userInfo) {
-            navigate('/login');
-        }
-    }, [userInfo, navigate]);
+  useEffect(() => {
+    if (!userInfo) {
+      navigate("/login");
+    }
+  }, [userInfo, navigate]);
 
-    if (!userInfo) return null; 
+  if (!userInfo) return null;
 
-    // Simulated rates (must match backend for estimation)
-    const USD_TO_PI_RATE = 100; 
-    const NGN_TO_USD_RATE = 0.001; 
+  // --- UPDATED RATES ---
+  const USD_TO_PI_RATE = 100;
+  // $1 = ₦1400, so ₦1 = 1/1400 USD
+  const NGN_TO_USD_RATE = 1 / 1400; // ~0.000714
+  // --- END UPDATED RATES ---
 
-    // Calculate USD equivalent
-    const amountUSD = method === 'naira' ? amount * NGN_TO_USD_RATE : amount;
-    // Calculate Pi Coins to credit
-    const piCoinsToCredit = amountUSD * USD_TO_PI_RATE;
+  const amountUSD = method === "naira" ? amount * NGN_TO_USD_RATE : amount;
+  const piCoinsToCredit = amountUSD * USD_TO_PI_RATE;
 
-    const submitHandler = async (e: FormEvent) => {
-        e.preventDefault();
-        setMessage('');
-        
-        // Basic frontend validation for minimum deposit (equivalent to $10)
-        if (amountUSD < 10) {
-            setMessage('Minimum deposit equivalent is $10 USD.');
-            return;
-        }
+  const submitHandler = async (e: FormEvent) => {
+    e.preventDefault();
+    setMessage("");
 
-        // Mandatory receipt for all deposits now
-        if (!receiptFile) {
-            setMessage('Please upload a screenshot of your payment receipt for verification.');
-            return;
-        }
-
-        setLoading(true);
-
-        // Use FormData for file upload
-        const formData = new FormData();
-        formData.append('amount', String(amount));
-        formData.append('method', method);
-        if (receiptFile) {
-            formData.append('receipt', receiptFile); // 'receipt' must match the Multer field name
-        }
-
-        try {
-            const config = {
-                headers: {
-                    'Content-Type': 'multipart/form-data', // Crucial for file upload
-                    // userInfo.token is guaranteed to exist here due to the early check
-                    Authorization: `Bearer ${userInfo.token}`, 
-                },
-            };
-
-            const { data } = await axios.post(
-                `${API_BASE_URL}/api/deposits`, 
-                formData, 
-                config
-            );
-
-            setMessage(`Success: ${data.message}`);
-            
-            // Clear form fields and file state
-            setAmount(method === 'naira' ? 10000 : 10);
-            setReceiptFile(null);
-            
-            // Navigate or encourage checking history
-            setTimeout(() => navigate('/dashboard'), 3000); 
-
-        } catch (error) {
-            let errorMessage = 'An unexpected error occurred.';
-            if (axios.isAxiosError(error) && error.response) {
-                errorMessage = (error.response.data as any).message || 'Deposit failed.';
-            }
-            setMessage(`Error: ${errorMessage}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const inputClass = "w-full p-3 rounded-md bg-white/20 border border-pi-accent/40 text-white placeholder-gray-400 focus:outline-none focus:border-pi-accent/80 transition duration-150";
-    const buttonClass = "w-full py-3 rounded-md font-bold text-white bg-pi-green-alt hover:bg-pi-green-alt/80 transition duration-300 disabled:opacity-50";
-
-    // Cast the details based on the current method to satisfy TypeScript
-    const currentDetails = depositDetails[method];
-
-    // Helper to check for Naira details structure
-    const isNairaDetails = (details: UsdtDetails | NairaDetails): details is NairaDetails => {
-        return (details as NairaDetails).bank !== undefined;
+    if (amountUSD < 10) {
+      setMessage("Minimum deposit equivalent is $10 USD.");
+      return;
     }
 
-    return (
-        <div className="w-full max-w-lg p-4 bg-white/10 rounded-xl shadow-2xl backdrop-blur-sm border border-pi-accent/50">
-            <h2 className="text-3xl font-bold text-pi-accent text-center mb-6">
-                Confirm Deposit Payment
-            </h2>
-            
-            {/* Balance & Rate Display */}
-            <div className='mb-4 text-center'>
-                <p className="text-gray-300">Current Balance: <span className="text-pi-green-alt font-bold">{userInfo.piCoinsBalance.toFixed(2)} P$</span></p>
-                <p className="text-sm text-gray-400">Rate: $1 USD = {USD_TO_PI_RATE} P$ | ₦{Math.round(1 / NGN_TO_USD_RATE).toLocaleString()} ≈ $1 USD (Est.)</p>
-            </div>
+    if (!receiptFile) {
+      setMessage("Please upload a screenshot of your payment receipt.");
+      return;
+    }
 
-            {/* Message Alert */}
-            {message && (
-                <div className={`p-3 mb-4 rounded ${message.includes('Success') ? 'bg-pi-green-alt/20 text-pi-green-alt' : 'bg-red-900/40 text-red-400'}`}>
-                    {message}
-                </div>
-            )}
+    setLoading(true);
+    const formData = new FormData();
+    formData.append("amount", String(amount));
+    formData.append("method", method);
+    formData.append("receipt", receiptFile);
 
-            <form onSubmit={submitHandler}>
-                {/* Method Selection */}
-                <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Payment Method</label>
-                    <div className="flex gap-4">
-                        <button
-                            type="button"
-                            onClick={() => { setMethod('usdt'); setAmount(10); setReceiptFile(null); }}
-                            className={`flex-1 py-3 rounded-md font-bold transition duration-150 ${method === 'usdt' ? 'bg-pi-accent text-white' : 'bg-white/10 text-gray-400 hover:bg-white/20'}`}
-                        >
-                            Crypto (USDT)
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => { setMethod('naira'); setAmount(10000); setReceiptFile(null); }}
-                            className={`flex-1 py-3 rounded-md font-bold transition duration-150 ${method === 'naira' ? 'bg-pi-accent text-white' : 'bg-white/10 text-gray-400 hover:bg-white/20'}`}
-                        >
-                            Local (Naira)
-                        </button>
-                    </div>
-                </div>
+    try {
+      const config = {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${userInfo.token}`,
+        },
+      };
 
-                {/* Deposit Details Display */}
-                <div className="mb-6 p-4 bg-red-900/40 rounded-md border border-red-500/50">
-                    <h4 className="text-lg font-bold text-red-300 mb-2">
-                        {method === 'naira' ? 'Bank Transfer Details' : 'USDT Wallet Address'}
-                    </h4>
-                    {/* FIX 1: Use type guard to solve TypeScript property access errors */}
-                    {isNairaDetails(currentDetails) ? (
-                        <>
-                            <p className="text-gray-200">Bank: <span className="font-bold">{currentDetails.bank}</span></p>
-                            <p className="text-gray-200">Account Name: <span className="font-bold">{currentDetails.accountName}</span></p>
-                            <p className="text-gray-200">Account Number: <span className="font-bold text-yellow-300">{currentDetails.accountNumber}</span></p>
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-gray-200">Address: <span className="font-bold text-yellow-300 break-all">{currentDetails.address}</span></p>
-                            <p className="text-gray-200">Network: <span className="font-bold">{currentDetails.network}</span></p>
-                        </>
-                    )}
-                </div>
+      const { data } = await axios.post(`${API_BASE_URL}/api/deposits`, formData, config);
+      setMessage(`✅ ${data.message}`);
+      // Adjusted default amount for Naira to align with a more standard minimum ($10 USD equivalent)
+      setAmount(method === "naira" ? 14000 : 10); 
+      setReceiptFile(null);
 
-                {/* Amount Input */}
-                <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="amount">
-                        Amount to Deposit ({method === 'naira' ? 'NGN ₦' : 'USD $'})
-                    </label>
-                    <input
-                        type="number"
-                        id="amount"
-                        placeholder={method === 'naira' ? 'e.g., 50000' : 'e.g., 50'}
-                        value={amount}
-                        onChange={(e) => setAmount(Number(e.target.value))}
-                        min={method === 'naira' ? 10000 : 10}
-                        step={method === 'naira' ? 1000 : 5}
-                        className={inputClass}
-                        required
-                    />
-                </div>
+      setTimeout(() => navigate("/dashboard"), 2500);
+    } catch (error) {
+      let errorMessage = "Deposit failed.";
+      if (axios.isAxiosError(error) && error.response) {
+        errorMessage = (error.response.data as any).message || errorMessage;
+      }
+      setMessage(`❌ ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-                {/* Conditional Receipt File Upload */}
-                <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="receipt">
-                        Upload Payment Screenshot/Receipt <span className='text-red-400'>(Required)</span>
-                    </label>
-                    <input
-                        type="file"
-                        id="receipt"
-                        accept="image/*, application/pdf"
-                        onChange={(e) => setReceiptFile(e.target.files ? e.target.files[0] : null)}
-                        className={`${inputClass} pt-2`}
-                        required
-                    />
-                     <p className="text-xs text-gray-500 mt-1">
-                        {currentDetails.note}
-                    </p>
-                </div>
+  const inputClass =
+    "w-full p-3 rounded-md bg-white/20 border border-pi-accent/40 text-white placeholder-gray-400 focus:outline-none focus:border-pi-accent/80 transition duration-150";
+  const buttonClass =
+    "w-full py-3 rounded-md font-bold text-white bg-gradient-to-r from-pi-accent to-pi-green-alt hover:from-pi-green-alt hover:to-pi-accent transition-all duration-500 shadow-lg shadow-pi-accent/20 hover:shadow-pi-green-alt/30 disabled:opacity-50";
 
+  const currentDetails = depositDetails[method];
+  const isNairaDetails = (details: UsdtDetails | NairaDetails): details is NairaDetails =>
+    (details as NairaDetails).bank !== undefined;
 
-                {/* Summary */}
-                <div className="mb-6 p-3 bg-white/10 rounded-md">
-                    <p className="text-gray-300">USD Equivalent: <span className="font-bold text-white">${amountUSD.toFixed(2)}</span></p>
-                    <p className="text-gray-300">P$ to be Credited (Upon Admin Approval):</p>
-                    <p className="text-xl font-bold text-pi-accent">{piCoinsToCredit.toFixed(2)} P$</p>
-                </div>
+  // New minimum deposit check logic for display
+  const minNairaDeposit = Math.ceil(10 / NGN_TO_USD_RATE); // Minimum ₦ amount to get $10
 
-                <button
-                    type="submit"
-                    // Disabled if loading OR if receipt file is missing
-                    disabled={loading || !receiptFile}
-                    className={buttonClass}
+  return (
+    <motion.div
+      className="w-full flex justify-center items-center px-4 py-10"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6 }}
+    >
+      <motion.div
+        className="w-full max-w-xl p-6 bg-gradient-to-b from-[#1a103d]/90 to-[#12092c]/90 rounded-2xl border border-pi-accent/50 shadow-[0_0_30px_-5px_rgba(124,58,237,0.4)] backdrop-blur-md"
+        whileHover={{ scale: 1.01 }}
+      >
+        <h2 className="text-3xl font-extrabold text-center text-pi-accent mb-6">
+          Deposit Funds 💰
+        </h2>
+
+        {/* Current Balance */}
+        <motion.div
+          className="mb-6 text-center bg-white/5 py-3 rounded-lg border border-white/10"
+          whileHover={{ scale: 1.02 }}
+        >
+          <p className="text-gray-300">
+            Current Balance:{" "}
+            <span className="text-pi-green-alt font-bold">
+              {userInfo.piCoinsBalance.toFixed(2)} P$
+            </span>
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            $1 = {USD_TO_PI_RATE} P$ | ₦
+            {Math.round(1 / NGN_TO_USD_RATE).toLocaleString()} ≈ $1
+          </p>
+        </motion.div>
+
+        {message && (
+          <motion.div
+            className={`p-3 mb-4 rounded-lg text-center text-sm ${
+              message.includes("✅")
+                ? "bg-green-900/40 text-pi-green-alt"
+                : "bg-red-900/40 text-red-400"
+            }`}
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {message}
+          </motion.div>
+        )}
+
+        <form onSubmit={submitHandler} className="space-y-5">
+          {/* Method Selection */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Payment Method</label>
+            <div className="flex gap-4">
+              {([`usdt`, `naira`] as const).map((opt) => (
+                <motion.button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    setMethod(opt);
+                    // Update default amount for the new rate
+                    setAmount(opt === "naira" ? 14000 : 10); 
+                    setReceiptFile(null);
+                  }}
+                  className={`flex-1 py-3 rounded-md font-semibold transition duration-200 ${
+                    method === opt
+                      ? "bg-pi-accent text-white shadow-lg shadow-pi-accent/30"
+                      : "bg-white/10 text-gray-400 hover:bg-white/20"
+                  }`}
+                  whileTap={{ scale: 0.97 }}
                 >
-                    {loading ? 'Submitting Request...' : `Submit Deposit Request`}
-                </button>
-            </form>
-        </div>
-    );
+                  {opt === "usdt" ? "Crypto (USDT)" : "Local (Naira)"}
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
+          {/* Deposit Details */}
+          <motion.div
+            className="p-4 bg-[#2b115c]/40 rounded-lg border border-pi-accent/30"
+            whileHover={{ scale: 1.01 }}
+          >
+            <h4 className="text-lg font-semibold text-pi-accent mb-2">
+              {method === "naira" ? "Bank Transfer Details" : "USDT Wallet Address"}
+            </h4>
+            {isNairaDetails(currentDetails) ? (
+              <>
+                <p className="text-gray-300">
+                  Bank: <span className="font-bold">{currentDetails.bank}</span>
+                </p>
+                <p className="text-gray-300">
+                  Account Name: <span className="font-bold">{currentDetails.accountName}</span>
+                </p>
+                <p className="text-gray-300">
+                  Account Number:{" "}
+                  <span className="font-bold text-yellow-300">{currentDetails.accountNumber}</span>
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-300 break-all">
+                  Address:{" "}
+                  <span className="font-bold text-yellow-300">{currentDetails.address}</span>
+                </p>
+                <p className="text-gray-300">
+                  Network: <span className="font-bold">{currentDetails.network}</span>
+                </p>
+              </>
+            )}
+            <p className="text-xs text-gray-400 mt-2">{currentDetails.note}</p>
+          </motion.div>
+
+          {/* Amount */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">
+              Amount ({method === "naira" ? "₦" : "$"})
+            </label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              // Update minimum for display
+              min={method === "naira" ? minNairaDeposit : 10}
+              step={method === "naira" ? 1000 : 5}
+              className={inputClass}
+              required
+            />
+          </div>
+
+          {/* Upload */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Upload Payment Receipt</label>
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                className={`${inputClass} cursor-pointer`}
+                required
+              />
+              <UploadCloud className="absolute right-4 top-3 text-gray-400" />
+            </div>
+          </div>
+
+          {/* Summary */}
+          <motion.div
+            className="p-3 bg-white/10 rounded-md border border-white/20"
+            whileHover={{ scale: 1.02 }}
+          >
+            <p className="text-gray-300">
+              USD Equivalent: <span className="font-bold">${amountUSD.toFixed(2)}</span>
+            </p>
+            <p className="text-gray-300 mt-1">
+              P$ to be Credited:{" "}
+              <span className="font-bold text-pi-accent">{piCoinsToCredit.toFixed(2)} P$</span>
+            </p>
+          </motion.div>
+
+          <motion.button
+            type="submit"
+            disabled={loading || !receiptFile}
+            className={buttonClass}
+            whileTap={{ scale: 0.97 }}
+          >
+            {loading ? "Processing..." : "Submit Deposit Request"}
+            {!loading && <ArrowRightCircle className="inline-block ml-2 w-5 h-5" />}
+          </motion.button>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
 };
 
 export default Deposit;

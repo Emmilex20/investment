@@ -1,231 +1,249 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// client/src/pages/Dashboard.tsx (FINAL PRODUCTION READY)
+// client/src/pages/Dashboard.tsx (ULTRA STYLED VERSION)
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import type { User } from '../types/userTypes';
-// Assuming you have a simple icon library or can use an SVG directly
-import { RefreshCw } from 'lucide-react'; 
+import React, { useEffect, useState, useCallback } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import type { User } from "../types/userTypes";
+import { RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
 
-// --- CONFIGURATION ---
-// Use the environment variable for the base URL.
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-// --- END CONFIGURATION ---
-
-const API_URL = `${API_BASE_URL}/api/users/profile`; // <-- FIXED URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = `${API_BASE_URL}/api/users/profile`;
 
 const Dashboard: React.FC = () => {
-    const { userInfo, dispatch, logout } = useAuth();
-    // Initialize profile to null. This ensures that the component enters a loading state 
-    // until the *full* profile (with populated referrals) is fetched from the server.
-    const [profile, setProfile] = useState<User | null>(null); 
-    // Separate loading state for the *initial* profile load
-    const [loading, setLoading] = useState(false); 
-    // New state for balance-specific refresh
-    const [isRefreshing, setIsRefreshing] = useState(false); 
-    const [error, setError] = useState<string | null>(null);
-    const navigate = useNavigate(); 
+  const { userInfo, dispatch, logout } = useAuth();
+  const [profile, setProfile] = useState<User | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-    // 1. Move the fetch logic into a memoized function (useCallback)
-    const fetchProfile = useCallback(async (manualRefresh: boolean = false) => {
-        // Use the token from the current userInfo state
-        const token = userInfo?.token;
-        if (!token) return;
+  const fetchProfile = useCallback(
+    async (manualRefresh: boolean = false) => {
+      const token = userInfo?.token;
+      if (!token) return;
 
+      if (manualRefresh) setIsRefreshing(true);
+      else setLoading(true);
+
+      try {
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+        const { data } = await axios.get<User>(API_URL, config);
+
+        setProfile(data);
+        dispatch({
+          type: "UPDATE_PROFILE",
+          payload: {
+            piCoinsBalance: data.piCoinsBalance,
+            referrals: data.referrals,
+            referredBy: data.referredBy,
+          },
+        });
+      } catch (err) {
+        let errorMessage = "Failed to load profile data.";
+        if (axios.isAxiosError(err) && err.response) {
+          errorMessage =
+            (err.response.data as any).message || "Authentication required.";
+        }
+        setError(errorMessage);
+        if (!manualRefresh && axios.isAxiosError(err) && err.response?.status === 401) {
+          logout();
+        }
+      } finally {
         if (manualRefresh) {
-            setIsRefreshing(true);
-        } else {
-            setLoading(true);
-        }
-        
-        setError(null);
-        try {
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${token}`, // Use the extracted token
-                },
-            };
+  setIsRefreshing(false);
+} else {
+  setLoading(false);
+}
 
-            const { data } = await axios.get<User>(API_URL, config); // <-- Using fixed API_URL
+      }
+    },
+    [userInfo, dispatch, logout]
+  );
 
-            // Update local state (for full dashboard view)
-            setProfile(data); 
+  useEffect(() => {
+    if (userInfo && !profile) fetchProfile();
+  }, [userInfo, fetchProfile, profile]);
 
-            // FIX: Update global context with ALL relevant latest profile data.
-            dispatch({ 
-                type: 'UPDATE_PROFILE', 
-                payload: { 
-                    piCoinsBalance: data.piCoinsBalance,
-                    referrals: data.referrals, // <-- PROPAGATE REFERRALS
-                    referredBy: data.referredBy, // <-- PROPAGATE REFERRED_BY
-                } 
-            });
-
-        } catch (err) {
-            let errorMessage = 'Failed to load profile data.';
-            if (axios.isAxiosError(err) && err.response) {
-                // Ensure we handle case where response.data is an object with a message property
-                errorMessage = (err.response.data as any).message || 'Authentication required.';
-            }
-            setError(errorMessage);
-            
-            // If token is expired or invalid (e.g., 401 Unauthorized), log user out
-            if (!manualRefresh && axios.isAxiosError(err) && err.response?.status === 401) { 
-                logout();
-            }
-        } finally {
-            if (manualRefresh) {
-                setIsRefreshing(false);
-            } else {
-                setLoading(false);
-            }
-        }
-    }, [userInfo, dispatch, logout]); // Dependencies are clean
-
-    // 2. useEffect for initial load
-    useEffect(() => {
-        // Only run on initial mount if userInfo exists and profile hasn't been fetched
-        if (userInfo && !profile) { 
-            fetchProfile();
-        }
-        // Dependency Array: Re-run only if userInfo changes (e.g., login/logout) or if fetchProfile changes (which it shouldn't unless its deps change)
-    }, [userInfo, fetchProfile, profile]); 
-
-    // Handle initial loading state visibility
-    if (loading || (!profile && userInfo)) {
-        return <div className="text-xl text-pi-accent mt-10">Loading Dashboard...</div>;
-    }
-
-    if (error && !profile) {
-        return <div className="text-xl text-red-500 mt-10">Error: {error}</div>;
-    }
-
-    // Fallback if user is not logged in, though AuthProvider should handle this
-    if (!profile) {
-        // If userInfo is null, this means the user is logged out. Redirect to home/login.
-        if (!userInfo) navigate('/');
-        return <div className="text-xl text-red-500 mt-10">Please log in to view the dashboard.</div>;
-    }
-    
-    // Now, profile is guaranteed to be a User object
-    
-    const cardClass = "bg-white/10 p-6 rounded-xl shadow-lg border border-pi-accent/50";
-    const labelClass = "text-gray-400 text-sm mb-1";
-    const valueClass = "text-white text-2xl font-bold";
-
+  if (loading || (!profile && userInfo)) {
     return (
-        <div className="w-full max-w-4xl p-4">
-            <h2 className="text-4xl font-bold text-white mb-6">
-                Welcome, {profile.name}!
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {/* Pi Coin Balance Card (UPDATED with Refresh Button) */}
-                <div className={`${cardClass} col-span-1 md:col-span-2 flex flex-col justify-between`}>
-                    <div>
-                        <div className={labelClass}>Your Pi Coin Balance (P$)</div>
-                        <div className={valueClass}>{profile.piCoinsBalance.toFixed(2)} P$</div>
-                        <div className="text-sm text-pi-green-alt mt-2">
-                            Use P$ to purchase investment packages.
-                        </div>
-                    </div>
-                    {/* RELOAD BUTTON */}
-                    <button
-                        onClick={() => fetchProfile(true)} // Pass true for manual refresh
-                        disabled={isRefreshing}
-                        className="mt-4 flex items-center justify-center space-x-2 py-2 px-4 rounded-full text-sm font-bold text-gray-900 bg-pi-green-alt/90 hover:bg-pi-green-alt transition duration-300 disabled:opacity-50"
-                    >
-                        {isRefreshing ? (
-                            <>
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                <span>Refreshing...</span>
-                            </>
-                        ) : (
-                            <>
-                                <RefreshCw className="w-4 h-4" />
-                                <span>Refresh Balance</span>
-                            </>
-                        )}
-                    </button>
-                </div>
-
-                {/* Referral Code Card */}
-                <div className={`${cardClass} bg-pi-accent/20`}>
-                    <div className={labelClass}>Your Referral Code</div>
-                    <div className="text-white text-xl font-mono tracking-widest">{profile.referralCode}</div>
-                    <button 
-                        onClick={() => { navigator.clipboard.writeText(profile.referralCode); alert('Code copied!'); }}
-                        className="text-xs mt-2 text-white/70 hover:text-white"
-                    >
-                        (Click to Copy)
-                    </button>
-                </div>
-            </div>
-
-            {/* Referral Status Section */}
-            <div className={`${cardClass} mb-8`}>
-                <h3 className="text-2xl text-pi-accent font-semibold mb-4">Referral Status</h3>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <div className={labelClass}>Total Active Referrals:</div>
-                        <div className={valueClass}>{profile.referrals.length}</div>
-                    </div>
-                    <div>
-                        <div className={labelClass}>Referred By:</div>
-                        <div className="text-white text-lg">
-                            {/* Display referredBy user's name if available, otherwise 'None' */}
-                            {profile.referredBy ? (
-                                <span className='font-bold text-pi-green-alt'>{profile.referredBy.name}</span>
-                            ) : (
-                                'None'
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <button
-                    onClick={() => navigate('/deposit')}
-                    className="col-span-1 py-3 px-4 rounded-lg font-bold text-white bg-pi-green-alt hover:bg-pi-green-alt/80 transition duration-300"
-                >
-                    Deposit (Get P$)
-                </button>
-                
-                <button
-                    onClick={() => navigate('/transfer')}
-                    className="col-span-1 py-3 px-4 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 transition duration-300"
-                >
-                    Transfer P$
-                </button>
-                
-                {/* WITHDRAW BUTTON */}
-                <button
-                    onClick={() => navigate('/withdraw')}
-                    className="col-span-1 py-3 px-4 rounded-lg font-bold text-gray-900 bg-amber-400 hover:bg-amber-300 transition duration-300"
-                >
-                    Withdraw
-                </button>
-
-                <button
-                    onClick={() => navigate('/invest')}
-                    className="col-span-1 py-3 px-4 rounded-lg font-bold text-white bg-pi-accent hover:bg-pi-accent/80 transition duration-300"
-                >
-                    Invest
-                </button>
-                <button
-                    onClick={logout}
-                    className="col-span-2 md:col-span-1 py-3 px-4 rounded-lg font-bold text-gray-300 border border-gray-600 hover:border-red-500 hover:text-red-500 transition duration-300"
-                >
-                    Logout
-                </button>
-            </div>
-
-        </div>
+      <div className="flex h-screen items-center justify-center text-xl text-purple-400">
+        Loading Dashboard...
+      </div>
     );
+  }
+
+  if (error && !profile) {
+    return (
+      <div className="flex h-screen items-center justify-center text-xl text-red-500">
+        Error: {error}
+      </div>
+    );
+  }
+
+  if (!profile) {
+    if (!userInfo) navigate("/");
+    return (
+      <div className="flex h-screen items-center justify-center text-xl text-red-500">
+        Please log in to view the dashboard.
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#0F051D] via-[#150035] to-[#0A001A] p-6 sm:p-10 text-white">
+      {/* BACKGROUND DECOR */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -left-40 w-[400px] h-[400px] bg-purple-700/30 rounded-full blur-[180px] animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[200px] animate-pulse delay-1000"></div>
+      </div>
+
+      {/* HEADER SECTION */}
+      <motion.div
+        initial={{ opacity: 0, y: -30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        className="relative z-10 mb-10 text-center"
+      >
+        <h2 className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-purple-300 via-pink-400 to-indigo-300 bg-clip-text text-transparent">
+          Welcome, {profile.name} 👋
+        </h2>
+        <p className="text-gray-400 mt-2">
+          Your personalized Pi Investment dashboard.
+        </p>
+      </motion.div>
+
+      {/* DASHBOARD GRID */}
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1 }}
+        className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
+      >
+        {/* BALANCE CARD */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="col-span-1 md:col-span-2 bg-white/10 backdrop-blur-lg border border-white/10 rounded-2xl p-6 shadow-xl transition-all"
+        >
+          <h3 className="text-sm uppercase text-gray-400 mb-2">
+            Pi Coin Balance (P$)
+          </h3>
+          <p className="text-4xl font-bold text-purple-300">
+            {profile.piCoinsBalance.toFixed(2)} P$
+          </p>
+          <p className="text-sm text-green-400 mt-1">
+            Use P$ to purchase investment packages.
+          </p>
+
+          <button
+            onClick={() => fetchProfile(true)}
+            disabled={isRefreshing}
+            className="mt-5 flex items-center justify-center space-x-2 py-2 px-4 rounded-full text-sm font-semibold bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 transition-all duration-300 shadow-lg"
+          >
+            {isRefreshing ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Refreshing...</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                <span>Refresh Balance</span>
+              </>
+            )}
+          </button>
+        </motion.div>
+
+        {/* REFERRAL CODE CARD */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-gradient-to-br from-purple-700/30 via-purple-800/20 to-indigo-900/20 backdrop-blur-md border border-purple-500/30 rounded-2xl p-6 shadow-xl"
+        >
+          <h3 className="text-sm uppercase text-gray-400 mb-2">
+            Your Referral Code
+          </h3>
+          <p className="text-xl font-mono tracking-wider text-purple-300">
+            {profile.referralCode}
+          </p>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(profile.referralCode);
+              alert("Referral code copied!");
+            }}
+            className="mt-2 text-xs text-purple-300 hover:text-purple-200 transition"
+          >
+            (Click to Copy)
+          </button>
+        </motion.div>
+      </motion.div>
+
+      {/* REFERRAL STATUS SECTION */}
+      <motion.div
+        whileHover={{ scale: 1.01 }}
+        className="relative z-10 bg-white/10 backdrop-blur-lg border border-white/10 rounded-2xl p-6 mb-10 shadow-xl"
+      >
+        <h3 className="text-2xl font-semibold text-purple-300 mb-4">
+          Referral Status
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-gray-400 text-sm mb-1">Total Active Referrals</p>
+            <p className="text-3xl font-bold text-green-400">
+              {profile.referrals.length}
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-400 text-sm mb-1">Referred By</p>
+            <p className="text-lg font-medium text-purple-200">
+              {profile.referredBy ? (
+                <span className="font-bold text-green-400">
+                  {profile.referredBy.name}
+                </span>
+              ) : (
+                "None"
+              )}
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ACTION BUTTONS */}
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1.2 }}
+        className="relative z-10 grid grid-cols-2 md:grid-cols-5 gap-4"
+      >
+        {[
+          { label: "Deposit (Get P$)", color: "from-green-400 to-emerald-500", to: "/deposit" },
+          { label: "Transfer P$", color: "from-blue-500 to-indigo-600", to: "/transfer" },
+          { label: "Withdraw", color: "from-amber-400 to-yellow-500", to: "/withdraw" },
+          { label: "Invest", color: "from-purple-500 to-pink-500", to: "/invest" },
+        ].map((btn, i) => (
+          <motion.button
+            key={i}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => navigate(btn.to)}
+            className={`py-3 px-4 rounded-lg font-bold text-white bg-gradient-to-r ${btn.color} hover:opacity-90 transition duration-300 shadow-lg`}
+          >
+            {btn.label}
+          </motion.button>
+        ))}
+
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={logout}
+          className="col-span-2 md:col-span-1 py-3 px-4 rounded-lg font-bold text-gray-300 border border-gray-600 hover:border-red-500 hover:text-red-500 transition duration-300"
+        >
+          Logout
+        </motion.button>
+      </motion.div>
+    </div>
+  );
 };
 
 export default Dashboard;
