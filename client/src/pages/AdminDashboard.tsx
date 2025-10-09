@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// client/src/pages/AdminDashboard.tsx (FINAL PRODUCTION READY)
+// client/src/pages/AdminDashboard.tsx (FINAL PRODUCTION READY with Enum Fix)
 
 import React, { useEffect, useState, type FormEvent, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +7,6 @@ import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
 // --- CONFIGURATION ---
-// Use the environment variable for the base URL. Fallback to localhost for safety.
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 // --- END CONFIGURATION ---
 
@@ -35,6 +34,20 @@ interface WithdrawalRequest {
     createdAt: string;
 }
 
+// NEW INTERFACE for Deposit Requests
+interface DepositRequest {
+    _id: string;
+    userId: string;
+    userName: string; 
+    userEmail: string; 
+    amount: number; // The amount deposited (e.g., $100 or ₦100,000)
+    piCoinsToCredit: number; // The calculated P$ amount
+    depositMethod: 'usdt' | 'naira';
+    status: 'Pending' | 'Approved' | 'Rejected'; // Frontend display status
+    receiptPath: string; // The path to the uploaded file (now a Cloudinary URL)
+    createdAt: string;
+}
+
 const AdminDashboard: React.FC = () => {
     const { userInfo, dispatch } = useAuth();
     const navigate = useNavigate();
@@ -51,6 +64,11 @@ const AdminDashboard: React.FC = () => {
     const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
     const [withdrawalLoading, setWithdrawalLoading] = useState(false);
     const [withdrawalError, setWithdrawalError] = useState<string | null>(null);
+    
+    // NEW STATE for Deposit Management
+    const [depositRequests, setDepositRequests] = useState<DepositRequest[]>([]);
+    const [depositLoading, setDepositLoading] = useState(false);
+    const [depositError, setDepositError] = useState<string | null>(null);
 
 
     // Redirect if not logged in or not an admin
@@ -109,12 +127,37 @@ const AdminDashboard: React.FC = () => {
         } catch (err) {
             let errorMessage = 'Failed to fetch withdrawal requests.';
             if (axios.isAxiosError(err) && err.response && err.response.data) {
-                // Ensure we handle case where response.data is an object with a message property
                 errorMessage = (err.response.data as any).message || errorMessage; 
             }
             setWithdrawalError(`Error fetching withdrawals: ${errorMessage}`);
         } finally {
             setWithdrawalLoading(false);
+        }
+    }, [isAdmin, token]); // Dependencies are clean
+    
+    // 3. NEW: Fetch Pending Deposit Requests
+    const fetchDeposits = useCallback(async () => {
+        if (!isAdmin || !token) { 
+            setDepositLoading(false);
+            return;
+        }
+        setDepositLoading(true);
+        setDepositError(null);
+        try {
+            const config = {
+                headers: { Authorization: `Bearer ${token}` },
+            };
+            // Assuming your backend API is at /api/deposits/admin/pending
+            const { data } = await axios.get<DepositRequest[]>(`${API_BASE_URL}/api/deposits/admin/pending`, config);
+            setDepositRequests(data); 
+        } catch (err) {
+            let errorMessage = 'Failed to fetch deposit requests.';
+            if (axios.isAxiosError(err) && err.response && err.response.data) {
+                errorMessage = (err.response.data as any).message || errorMessage; 
+            }
+            setDepositError(`Error fetching deposits: ${errorMessage}`);
+        } finally {
+            setDepositLoading(false);
         }
     }, [isAdmin, token]); // Dependencies are clean
 
@@ -124,10 +167,11 @@ const AdminDashboard: React.FC = () => {
         if (isAdmin) {
             fetchUsers();
             fetchWithdrawals(); 
+            fetchDeposits(); // NEW
         }
-    }, [isAdmin, fetchUsers, fetchWithdrawals]); 
+    }, [isAdmin, fetchUsers, fetchWithdrawals, fetchDeposits]); 
 
-    // --- Pi Coin Distribution Handler ---
+    // --- Pi Coin Distribution Handler (Manual Credit) ---
     const handleCreditSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setCreditMessage(null);
@@ -146,7 +190,7 @@ const AdminDashboard: React.FC = () => {
             };
             
             const { data } = await axios.post<{ message: string, newBalance: number }>(
-                `${API_BASE_URL}/api/users/admin/add-coins`, // <-- FIXED URL
+                `${API_BASE_URL}/api/users/admin/add-coins`,
                 creditData,
                 config
             );
@@ -155,10 +199,10 @@ const AdminDashboard: React.FC = () => {
             
             // CRUCIAL: CHECK IF ADMIN CREDITED THEMSELVES AND UPDATE GLOBAL STATE
             if (userInfo && creditData.userId === userInfo._id) {
-                 dispatch({ 
-                     type: 'UPDATE_PROFILE', 
-                     payload: { piCoinsBalance: data.newBalance } 
-                 });
+                dispatch({ 
+                    type: 'UPDATE_PROFILE', 
+                    payload: { piCoinsBalance: data.newBalance } 
+                });
             }
             
             await fetchUsers(); // Re-fetch user list to show updated balance
@@ -183,18 +227,15 @@ const AdminDashboard: React.FC = () => {
         if (!isAdmin || !token) return;
 
         const actionText = status === 'Processed' ? 'Processing' : 'Rejecting';
-        // <-- FIXED URL
         const endpoint = `${API_BASE_URL}/api/transactions/admin/withdrawals/${id}/${status.toLowerCase()}`;
         
-        if (!window.confirm(`Are you sure you want to ${actionText.toLowerCase()} this withdrawal (ID: ${id})?`)) {
+        if (!window.confirm(`Are you sure you want to ${actionText.toLowerCase()} this withdrawal (ID: ${id})? This action is FINAL and will affect the user's balance and transaction history.`)) {
             return;
         }
 
         try {
             const config = {
-                headers: { 
-                    Authorization: `Bearer ${token}` 
-                },
+                headers: { Authorization: `Bearer ${token}` },
             };
             
             const { data } = await axios.put<{ message: string }>(endpoint, {}, config);
@@ -218,6 +259,58 @@ const AdminDashboard: React.FC = () => {
     const handleProcessWithdrawal = (id: string) => updateWithdrawalStatus(id, 'Processed');
     const handleRejectWithdrawal = (id: string) => updateWithdrawalStatus(id, 'Failed');
     
+    // --- NEW: Deposit Request Actions (API CALL HANDLERS) ---
+    
+    // Generic handler for Approving or Rejecting a deposit
+    const updateDepositStatus = async (id: string, status: 'Approved' | 'Rejected') => {
+        if (!isAdmin || !token) return;
+
+        const actionText = status === 'Approved' ? 'Approving' : 'Rejecting';
+        // Assuming your backend API for this is at /api/deposits/admin/update-status/:id
+        const endpoint = `${API_BASE_URL}/api/deposits/admin/update-status/${id}`; 
+        
+        if (!window.confirm(`Are you sure you want to ${actionText.toLowerCase()} this deposit (ID: ${id})? This action is FINAL and will credit the user's account if approved.`)) {
+            return;
+        }
+
+        try {
+            const config = {
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+            };
+            
+            // VITAL FIX: Send the status in lowercase to match the Mongoose Enum: ['pending', 'approved', 'rejected']
+            const { data } = await axios.put<{ message: string }>(endpoint, { 
+                status: status.toLowerCase() 
+            }, config);
+
+            // Notify and refresh list
+            alert(`${actionText} successful: ${data.message}`);
+            
+            // Refresh the deposit list and user balances
+            fetchDeposits(); 
+            fetchUsers(); 
+
+        } catch (err) {
+            let errorMessage = `${actionText} failed.`;
+            if (axios.isAxiosError(err) && err.response) {
+                errorMessage = (err.response.data as any).message || 'Server Error.';
+            }
+            alert(`Error during ${actionText}: ${errorMessage}`);
+        }
+    };
+
+    const handleApproveDeposit = (id: string) => updateDepositStatus(id, 'Approved');
+    const handleRejectDeposit = (id: string) => updateDepositStatus(id, 'Rejected');
+    
+    // VITAL FIX: Helper to get the full URL for the receipt download
+    const getReceiptDownloadUrl = (path: string) => {
+        // Since the 'path' stores the Cloudinary URL (e.g., https://res.cloudinary.com/...)
+        return path;
+    };
+
     // ----------------------------------------------------
 
     if (!isAdmin) return null; // Should be redirected, but safe check
@@ -230,9 +323,9 @@ const AdminDashboard: React.FC = () => {
         <div className="w-full max-w-6xl p-4 space-y-10">
             <h2 className="text-4xl font-bold text-red-500 mb-8">Admin Control Panel</h2>
             
-            {/* 1. Pi Coin Distribution Form */}
+            {/* 1. Pi Coin Distribution Form (Manual Credit) */}
             <div className={`${cardClass} border border-red-500/50`}>
-                <h3 className="text-2xl text-white font-semibold mb-4">Distribute Pi Coins (P$)</h3>
+                <h3 className="text-2xl text-white font-semibold mb-4">Manual Pi Coin Distribution (P$)</h3>
                 <form onSubmit={handleCreditSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-300 mb-1">Select User</label>
@@ -277,8 +370,78 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 )}
             </div>
+            
+            {/* 2. NEW: Pending Deposit Request Management */}
+            <div className={`${cardClass} border border-green-500/50`}>
+                <h3 className="text-2xl text-white font-semibold mb-4 flex justify-between items-center">
+                    Pending Deposit Requests 
+                    <span className="text-lg font-bold text-green-400/80">{depositLoading ? 'Loading...' : depositRequests.length}</span>
+                </h3>
+                
+                {depositError ? (
+                    <p className="text-red-400 p-4 bg-red-900/20 rounded-md">
+                        {depositError}
+                    </p>
+                ) : depositRequests.length === 0 ? (
+                    <p className="text-gray-400 p-4 bg-white/5 rounded-md text-center">No pending deposit requests found.</p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-700">
+                            <thead className="bg-white/10">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">User</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Amount Paid</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">P$ To Credit</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Receipt</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-800">
+                                {depositRequests.map((req) => (
+                                    <tr key={req._id} className="hover:bg-white/5 transition duration-150">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm font-medium text-white">{req.userName}</div>
+                                            <div className="text-xs text-gray-400">{req.userEmail}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-amber-300 font-bold">
+                                            {req.amount.toFixed(2)} {req.depositMethod.toUpperCase() === 'NAIRA' ? '₦' : '$'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-400 font-bold">
+                                            {req.piCoinsToCredit.toFixed(2)} P$
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <a 
+                                                href={getReceiptDownloadUrl(req.receiptPath)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-400 hover:text-blue-300 underline text-sm"
+                                            >
+                                                View Receipt
+                                            </a>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                            <button
+                                                onClick={() => handleApproveDeposit(req._id)}
+                                                className="text-green-500 hover:text-green-300 font-bold"
+                                            >
+                                                Approve
+                                            </button>
+                                            <button
+                                                onClick={() => handleRejectDeposit(req._id)}
+                                                className="text-red-500 hover:text-red-300 font-bold"
+                                            >
+                                                Reject
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
 
-            {/* 2. Withdrawal Request Management (NEW SECTION) */}
+            {/* 3. Withdrawal Request Management (Existing Section - now #3) */}
             <div className={`${cardClass} border border-amber-400/50`}>
                 <h3 className="text-2xl text-white font-semibold mb-4 flex justify-between items-center">
                     Pending Withdrawal Requests 
@@ -286,9 +449,9 @@ const AdminDashboard: React.FC = () => {
                 </h3>
                 
                 {withdrawalError ? (
-                     <p className="text-red-400 p-4 bg-red-900/20 rounded-md">
-                         {withdrawalError}
-                     </p>
+                    <p className="text-red-400 p-4 bg-red-900/20 rounded-md">
+                        {withdrawalError}
+                    </p>
                 ) : withdrawalRequests.length === 0 ? (
                     <p className="text-gray-400 p-4 bg-white/5 rounded-md text-center">No pending withdrawal requests found.</p>
                 ) : (
@@ -310,7 +473,7 @@ const AdminDashboard: React.FC = () => {
                                             <div className="text-sm font-medium text-white">{req.userName}</div>
                                             <div className="text-xs text-gray-400">{req.userEmail}</div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-pi-green-alt font-bold">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-400 font-bold">
                                             {req.amount.toFixed(2)} P$
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-300 max-w-xs">
@@ -341,7 +504,8 @@ const AdminDashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* 3. User List Table */}
+
+            {/* 4. User List Table */}
             <h3 className="text-2xl text-white font-semibold mb-4">All Users ({users.length})</h3>
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-700">
@@ -360,7 +524,7 @@ const AdminDashboard: React.FC = () => {
                                     <div className="text-sm font-medium text-white">{user.name}</div>
                                     <div className="text-sm text-gray-400">{user.email}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-pi-green-alt font-bold">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-400 font-bold">
                                     {user.piCoinsBalance.toFixed(2)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">

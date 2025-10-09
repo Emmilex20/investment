@@ -11,6 +11,8 @@ export interface InvestmentPackage {
   dailyReturnRate: number; // e.g., 0.05
   requiredReferrals: number;
   isActive: boolean;
+  createdAt: string; 
+  updatedAt: string;
 }
 
 // Interface for a User's Investment Transaction

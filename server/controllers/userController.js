@@ -23,6 +23,8 @@ const formatDetails = (payoutMethod, details) => {
             return `USDT TRC20: ${details.cryptoAddress}`;
         case 'USD_PAYPAL':
             return `PayPal: ${details.paypalEmail}`;
+        case 'PI_COIN_ADDRESS': // <--- NEW CASE ADDED
+            return `Pi Coin Address: ${details.piCoinAddress}`;
         default:
             return 'Details Not Provided';
     }
@@ -206,7 +208,8 @@ const withdrawPiCoins = asyncHandler(async (req, res) => {
         accountNumber, 
         accountName, 
         cryptoAddress, 
-        paypalEmail 
+        paypalEmail,
+        piCoinAddress // <--- NEW FIELD DESTRUCTURED
     } = req.body;
     
     const withdrawalAmount = Number(amount);
@@ -238,23 +241,29 @@ const withdrawPiCoins = asyncHandler(async (req, res) => {
 
     if (payoutMethod === 'NAIRA_BANK') {
         if (!bankName || !accountNumber || !accountName) {
-            res.status(400); // Changed from 440 to standard 400
+            res.status(400); 
             throw new Error('Missing Naira bank details.');
         }
         detailsString = formatDetails(payoutMethod, { bankName, accountNumber, accountName });
     } else if (payoutMethod === 'USDT_TRC20') {
         if (!cryptoAddress) {
-            res.status(400); // Changed from 440 to standard 400
+            res.status(400); 
             throw new Error('Missing USDT TRC20 address.');
         }
         detailsString = formatDetails(payoutMethod, { cryptoAddress });
     } else if (payoutMethod === 'USD_PAYPAL') {
         if (!paypalEmail) {
-            res.status(400); // Changed from 440 to standard 400
+            res.status(400); 
             throw new Error('Missing PayPal email.');
         }
         detailsString = formatDetails(payoutMethod, { paypalEmail });
-    } else {
+    } else if (payoutMethod === 'PI_COIN_ADDRESS') { // <--- NEW VALIDATION AND DETAILS STRING
+        if (!piCoinAddress) {
+            res.status(400);
+            throw new Error('Missing Pi Coin address.');
+        }
+        detailsString = formatDetails(payoutMethod, { piCoinAddress });
+    } else {
         res.status(400);
         throw new Error('Invalid payout method.');
     }
@@ -332,7 +341,7 @@ export {
     registerUser, 
     getUserProfile, 
     transferPiCoins, 
-    withdrawPiCoins, // <--- EXPOSED
+    withdrawPiCoins, 
     adminAddPiCoins, 
     getUsers 
 };

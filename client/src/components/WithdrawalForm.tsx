@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 /* eslint-disable no-irregular-whitespace */
-// client/src/components/WithdrawalForm.tsx (FIXED: Now receives updated referral count from AuthContext)
+// client/src/components/WithdrawalForm.tsx (ADDED PI_COIN_ADDRESS OPTION)
 
 import React, { useState, type FormEvent, useMemo } from 'react';
 import axios from 'axios';
@@ -24,7 +24,8 @@ const REFERRAL_TIERS = [
 ];
 // --------------------------------------------------------------------------
 
-type PayoutMethod = 'NAIRA_BANK' | 'USDT_TRC20' | 'USD_PAYPAL';
+// UPDATED TYPE: Added 'PI_COIN_ADDRESS'
+type PayoutMethod = 'NAIRA_BANK' | 'USDT_TRC20' | 'USD_PAYPAL' | 'PI_COIN_ADDRESS';
 
 const WithdrawalForm: React.FC = () => {
     const { userInfo, dispatch } = useAuth();
@@ -37,30 +38,25 @@ const WithdrawalForm: React.FC = () => {
     const [accountName, setAccountName] = useState('');
     const [cryptoAddress, setCryptoAddress] = useState('');
     const [paypalEmail, setPaypalEmail] = useState('');
+    // NEW STATE FOR PI COIN ADDRESS
+    const [piCoinAddress, setPiCoinAddress] = useState('');
 
     const [loading, setLoading] = useState(false);
     const [submissionMessage, setSubmissionMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
-    // We can keep referralWarning for the submission-attempt-specific message
     const [referralWarning, setReferralWarning] = useState<string | null>(null); 
 
-    // FIX: Only check for basic userInfo existence.
     if (!userInfo) return null;
 
-    // Use optional chaining and nullish coalescing for safe access
     const currentBalance = userInfo.piCoinsBalance ?? 0;
-    // FIX: Safely access referral length, defaulting to 0. THIS NOW USES UPDATED CONTEXT DATA.
     const actualReferrals = userInfo.referrals?.length ?? 0; 
 
     // --- ASSUMPTION: Total Invested Value ---
-    // Total invested value in Pi Coins (P$). Assuming this comes from user profile.
-    // Replace 1000 with `userInfo.totalInvestedPiCoins` when available from the API/context.
     const totalInvestedPiCoins = 1000; 
     const totalInvestedValueUsd = totalInvestedPiCoins * PI_COIN_USD_RATE;
     // --- END ASSUMPTION ---
 
     // --- Hook: Calculate Required Referrals ---
     const requiredReferrals = useMemo(() => {
-        // Sort tiers from highest to lowest threshold to find the correct tier
         const sortedTiers = [...REFERRAL_TIERS].sort((a, b) => b.usdThreshold - a.usdThreshold);
 
         for (const tier of sortedTiers) {
@@ -68,7 +64,6 @@ const WithdrawalForm: React.FC = () => {
                 return tier.requiredReferrals;
             }
         }
-        // Default requirement if total investment is below all thresholds
         return 0;
     }, [totalInvestedValueUsd]);
     // ---------------------------------------
@@ -82,6 +77,9 @@ const WithdrawalForm: React.FC = () => {
         if (payoutMethod === 'USDT_TRC20' || payoutMethod === 'USD_PAYPAL') {
             return usdValue.toFixed(2) + ' USD / USDT';
         }
+        if (payoutMethod === 'PI_COIN_ADDRESS') {
+            return amount.toFixed(2) + ' P$'; // Withdrawal is in P$
+        }
         return '0.00';
     }, [amount, payoutMethod]);
     // ---------------------------------------
@@ -94,26 +92,18 @@ const WithdrawalForm: React.FC = () => {
         setSubmissionMessage(null);
         setReferralWarning(null); 
 
-        // --- 1. Basic Validation ---
-        if (amount <= 0) {
-            setSubmissionMessage({ text: 'Please enter a valid amount.', type: 'error' });
-            return;
-        }
-
-        if (amount < MIN_WITHDRAWAL_AMOUNT) {
-            setSubmissionMessage({ 
-                text: `The minimum withdrawal amount is ${MIN_WITHDRAWAL_AMOUNT} P$.`, 
-                type: 'error' 
-            });
-            return;
-        }
-
-        if (amount > currentBalance) {
-            setSubmissionMessage({ text: 'Insufficient balance for this withdrawal.', type: 'error' });
-            return;
-        }
+        // ... (Basic Validation - remains the same) ...
+        if (amount <= 0 || amount < MIN_WITHDRAWAL_AMOUNT || amount > currentBalance) {
+            const text = amount <= 0 
+                ? 'Please enter a valid amount.' 
+                : amount < MIN_WITHDRAWAL_AMOUNT 
+                ? `The minimum withdrawal amount is ${MIN_WITHDRAWAL_AMOUNT} P$.` 
+                : 'Insufficient balance for this withdrawal.';
+            setSubmissionMessage({ text, type: 'error' });
+            return;
+        }
         
-        // --- 2. Referral Requirement Check (Visible only on submit attempt) ---
+        // --- 2. Referral Requirement Check ---
         if (requiredReferrals > actualReferrals) {
             const needed = requiredReferrals - actualReferrals;
             const warningText = `Withdrawal blocked: You need ${needed} more active referral(s) to meet the requirement of ${requiredReferrals} referrals for your investment level ($${totalInvestedValueUsd.toFixed(2)}).`;
@@ -124,7 +114,7 @@ const WithdrawalForm: React.FC = () => {
         }
         // ----------------------------------------------------------------------------------
 
-        // --- 3. Payout Method Specific Validation ---
+        // --- 3. Payout Method Specific Validation (ADDED PI_COIN_ADDRESS) ---
         let withdrawalDetails = {};
         if (payoutMethod === 'NAIRA_BANK') {
             if (!bankName || !accountNumber || !accountName) {
@@ -144,7 +134,13 @@ const WithdrawalForm: React.FC = () => {
                 return;
             }
             withdrawalDetails = { paypalEmail };
-        }
+        } else if (payoutMethod === 'PI_COIN_ADDRESS') { // NEW LOGIC
+            if (!piCoinAddress) {
+                setSubmissionMessage({ text: 'Please enter your Pi Coin wallet address.', type: 'error' });
+                return;
+            }
+            withdrawalDetails = { piCoinAddress };
+        }
 
         setLoading(true);
 
@@ -163,13 +159,13 @@ const WithdrawalForm: React.FC = () => {
                 ...withdrawalDetails, 
             };
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
             const { data } = await axios.post<{ message: string, newBalance: number }>(
-                `${API_BASE_URL}/api/users/withdraw`, // <-- FIXED URL
-                requestBody,
-                config
-            );
+                `${API_BASE_URL}/api/users/withdraw`, 
+                requestBody,
+                config
+            );
 
             // Update user's balance in global context on successful withdrawal
             dispatch({ 
@@ -185,6 +181,7 @@ const WithdrawalForm: React.FC = () => {
             setAccountName('');
             setCryptoAddress('');
             setPaypalEmail('');
+            setPiCoinAddress(''); // NEW: Reset Pi Coin address
 
         } catch (err) {
             let errorMessage = 'Withdrawal failed. Please try again.';
@@ -200,7 +197,7 @@ const WithdrawalForm: React.FC = () => {
     // Disable if basic checks fail or if the referral requirement is not met
     const isWithdrawDisabled = loading || amount > currentBalance || amount < MIN_WITHDRAWAL_AMOUNT || !isReferralRequirementMet;
     
-    // --- Dynamic Input Renderer (No change here) ---
+    // --- Dynamic Input Renderer (UPDATED) ---
     const renderPayoutInputs = () => {
         switch (payoutMethod) {
             case 'NAIRA_BANK':
@@ -254,6 +251,17 @@ const WithdrawalForm: React.FC = () => {
                         required
                     />
                 );
+            case 'PI_COIN_ADDRESS': // NEW CASE
+                return (
+                    <input
+                        type="text"
+                        placeholder="Pi Coin Wallet Address (e.g., pxwcwkalwiwnea)"
+                        className="w-full p-3 rounded-md bg-gray-700/80 border border-gray-600 text-white focus:ring-amber-400 focus:border-amber-400"
+                        value={piCoinAddress}
+                        onChange={(e) => setPiCoinAddress(e.target.value)}
+                        required
+                    />
+                );
             default:
                 return null;
         }
@@ -264,7 +272,8 @@ const WithdrawalForm: React.FC = () => {
         <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-amber-400/50 max-w-lg w-full">
             <h3 className="text-3xl font-bold text-amber-400 mb-6">Cash Out Pi Coins (P$)</h3>
             
-            <div className="mb-4 p-3 bg-gray-700 rounded-md">
+            {/* ... (Balance and Rate Info - unchanged) ... */}
+            <div className="mb-4 p-3 bg-gray-700 rounded-md">
                 <p className="text-lg text-gray-300">
                     Current Balance: <span className="font-extrabold text-white">{currentBalance.toFixed(2)} P$</span>
                 </p>
@@ -276,8 +285,8 @@ const WithdrawalForm: React.FC = () => {
                 </p>
             </div>
 
-            {/* PERMANENT REFERRAL STATUS BLOCK (NEW) */}
-            <div className={`mb-6 p-4 rounded-lg border-2 ${isReferralRequirementMet ? 'bg-green-900/40 border-green-500' : 'bg-red-900/40 border-red-500'}`}>
+            {/* ... (Referral Status Block - unchanged) ... */}
+            <div className={`mb-6 p-4 rounded-lg border-2 ${isReferralRequirementMet ? 'bg-green-900/40 border-green-500' : 'bg-red-900/40 border-red-500'}`}>
                 <div className="flex items-center justify-between">
                     <h4 className="text-lg font-bold text-white">Withdrawal Requirement</h4>
                     <span className="flex items-center text-sm font-bold">
@@ -306,10 +315,10 @@ const WithdrawalForm: React.FC = () => {
                     )}
                 </p>
             </div>
-            {/* END PERMANENT REFERRAL STATUS BLOCK */}
+
 
             <form onSubmit={handleWithdrawal} className="space-y-4">
-                {/* 1. Pi Coin Amount Input */}
+                {/* 1. Pi Coin Amount Input - unchanged */}
                 <div>
                     <label htmlFor="amount" className="block text-sm font-medium text-gray-300 mb-1">
                         Amount of Pi Coins (P$) to Withdraw
@@ -335,7 +344,7 @@ const WithdrawalForm: React.FC = () => {
                     )}
                 </div>
 
-                {/* 2. Payout Method Selection */}
+                {/* 2. Payout Method Selection (UPDATED) */}
                 <div>
                     <label htmlFor="payoutMethod" className="block text-sm font-medium text-gray-300 mb-1">
                         Choose Payout Method
@@ -348,21 +357,25 @@ const WithdrawalForm: React.FC = () => {
                         required
                     >
                         <option value="NAIRA_BANK">Naira (Local Bank Transfer)</option>
+                        <option value="PI_COIN_ADDRESS">Pi Coin Wallet Address</option> {/* NEW OPTION */}
                         <option value="USDT_TRC20">USDT (TRC20 Network)</option>
                         <option value="USD_PAYPAL">USD (PayPal)</option>
                     </select>
                 </div>
                 
-                {/* 3. Dynamic Payout Details Input */}
+                {/* 3. Dynamic Payout Details Input (UPDATED) */}
                 <div className="p-3 bg-gray-700 rounded-md">
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                        {payoutMethod === 'NAIRA_BANK' ? 'Bank Details' : payoutMethod === 'USDT_TRC20' ? 'USDT Wallet Address' : 'PayPal Email'}
+                        {payoutMethod === 'NAIRA_BANK' ? 'Bank Details' 
+                            : payoutMethod === 'USDT_TRC20' ? 'USDT Wallet Address' 
+                            : payoutMethod === 'PI_COIN_ADDRESS' ? 'Pi Coin Wallet Address' // NEW LABEL
+                            : 'PayPal Email'}
                     </label>
                     {renderPayoutInputs()}
                 </div>
 
-                {/* Conditional Referral Warning (Only on failed submit) */}
-                {referralWarning && (
+                {/* ... (Warnings and Button - unchanged) ... */}
+                {referralWarning && (
                     <div className="p-3 rounded-md text-red-300 bg-red-900/40 text-sm font-medium">
                         {referralWarning}
                     </div>

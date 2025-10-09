@@ -174,7 +174,7 @@ const Invest: React.FC = () => {
 
     return (
         <div className="w-full max-w-5xl p-4">
-            <h2 className="text-4xl font-bold text-white mb-6 text-pi-accent">
+            <h2 className="text-4xl font-bold text-white mb-6">
                 Investment Plans
             </h2>
             
@@ -218,9 +218,12 @@ const Invest: React.FC = () => {
                         return (
                             <div key={pkg._id} className={`${cardClass} flex flex-col justify-between`}>
                                 <div>
-                                    <h3 className="text-2xl font-bold mb-3 text-white">{pkg.name}</h3>
+                                    {/* UPDATED: Display USD Cost in the requested format */}
+                                    <h3 className="text-2xl font-bold mb-3 text-white">
+                                        {pkg.name} <span className='text-red-500'>${pkg.costUSD.toFixed(0)} (π)</span>
+                                    </h3>
                                     <p className="text-lg text-gray-300 mb-2">
-                                        Invest: <span className={highlightClass}>{pkg.rewardPiCoins} P$</span>
+                                        Investment Cost: <span className={highlightClass}>{pkg.rewardPiCoins} P$</span>
                                     </p>
                                     <ul className="text-sm space-y-2 text-gray-400 mb-4">
                                         <li>ROI: **{pkg.dailyReturnRate * 100}% Daily**</li>
